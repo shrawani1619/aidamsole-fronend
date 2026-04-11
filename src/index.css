@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+  body {
+    @apply font-sans text-gray-800 bg-surface-secondary;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-gray-300 rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-gray-400; }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-brand-navy text-white px-4 py-2 rounded-lg text-sm font-medium
+           hover:bg-brand-navy-dark transition-all duration-150 flex items-center gap-2
+           disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98];
+  }
+  .btn-secondary {
+    @apply bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-lg text-sm font-medium
+           hover:bg-surface-tertiary transition-all duration-150 flex items-center gap-2
+           disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98];
+  }
+  .btn-danger {
+    @apply bg-brand-red text-white px-4 py-2 rounded-lg text-sm font-medium
+           hover:bg-brand-red-dark transition-all duration-150 flex items-center gap-2
+           disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98];
+  }
+  .card {
+    @apply bg-white rounded-xl shadow-card border border-gray-100 p-5;
+  }
+  .input {
+    @apply w-full border border-gray-200 rounded-lg px-3 py-2 text-sm
+           focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy
+           placeholder:text-gray-400 bg-white transition-all duration-150;
+  }
+  .label {
+    @apply block text-xs font-medium text-gray-600 mb-1;
+  }
+  .badge-green  { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700; }
+  .badge-amber  { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700; }
+  .badge-red    { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700; }
+  .badge-blue   { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700; }
+  .badge-purple { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700; }
+  .badge-gray   { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600; }
+
+  .stat-card {
+    @apply card flex flex-col gap-1;
+  }
+  .page-header {
+    @apply flex items-center justify-between mb-6;
+  }
+  .page-title {
+    @apply text-xl font-semibold text-gray-900;
+  }
+  .table-container {
+    @apply w-full overflow-x-auto rounded-xl border border-gray-100 bg-white shadow-card;
+  }
+  .table {
+    @apply w-full text-sm;
+  }
+  .table th {
+    @apply px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide
+           bg-surface-secondary border-b border-gray-100;
+  }
+  .table td {
+    @apply px-4 py-3 border-b border-gray-50 text-gray-700;
+  }
+  .table tr:last-child td { @apply border-b-0; }
+  .table tr:hover td { @apply bg-surface-secondary/50; }
+
+  .sidebar-link {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
+           text-gray-300 hover:text-white hover:bg-white/10 transition-all duration-150 cursor-pointer;
+  }
+  .sidebar-link.active {
+    @apply bg-white/15 text-white;
+  }
+  .modal-overlay {
+    @apply fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fade-in;
+  }
+  .modal {
+    @apply bg-white rounded-2xl shadow-modal w-full max-w-lg max-h-[90vh] overflow-y-auto animate-slide-in;
+  }
+  .modal-lg {
+    @apply bg-white rounded-2xl shadow-modal w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slide-in;
+  }
+}
+
+/* Health score colors */
+.health-green { color: #16a34a; }
+.health-amber { color: #d97706; }
+.health-red   { color: #dc2626; }
+
+/* Priority colors */
+.priority-critical { @apply bg-red-100 text-red-700; }
+.priority-high     { @apply bg-orange-100 text-orange-700; }
+.priority-medium   { @apply bg-yellow-100 text-yellow-700; }
+.priority-low      { @apply bg-gray-100 text-gray-600; }
+
+/* Status colors */
+.status-active      { @apply bg-green-100 text-green-700; }
+.status-at_risk     { @apply bg-red-100 text-red-700; }
+.status-onboarding  { @apply bg-blue-100 text-blue-700; }
+.status-paused      { @apply bg-gray-100 text-gray-600; }
+.status-churned     { @apply bg-red-200 text-red-800; }
+.status-lead        { @apply bg-purple-100 text-purple-700; }
+
+/* Skeleton loader */
+.skeleton {
+  @apply bg-gray-200 rounded animate-pulse;
+}
