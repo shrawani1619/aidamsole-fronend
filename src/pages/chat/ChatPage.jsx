@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Send, Plus, MessageSquare, Search, Users } from 'lucide-react';
-import { chatApi } from '../../services/api';
+import { Send, Plus, MessageSquare, Search, Users, Upload, FileText, Loader2, X } from 'lucide-react';
+import { chatApi, uploadApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { Avatar, PageLoader, EmptyState, Modal } from '../../components/ui';
@@ -70,7 +70,10 @@ export default function ChatPage() {
   const [message, setMessage] = useState('');
   const [newConvoOpen, setNewConvoOpen] = useState(false);
   const [search, setSearch] = useState('');
+  /** Staged attachment — upload + send only when user clicks Send */
+  const [pendingFile, setPendingFile] = useState(null);
   const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const { data: convosData, isLoading } = useQuery({
     queryKey: ['conversations'],
@@ -84,9 +87,56 @@ export default function ChatPage() {
   });
 
   const sendMutation = useMutation({
-    mutationFn: () => chatApi.sendMessage(activeConvo._id, { text: message }),
-    onSuccess: () => { setMessage(''); refetchMessages(); qc.invalidateQueries(['conversations']); }
+    mutationFn: async ({ file, text, convoId }) => {
+      if (file) {
+        const { data } = await uploadApi.single(file);
+        const fileUrl = data?.file?.url;
+        const fileName = data?.file?.filename || file.name;
+        if (!fileUrl) throw new Error('Upload failed');
+        const isImage = /^image\//.test(file.type || data?.file?.mimetype || '');
+        const caption = (text || '').trim();
+        await chatApi.sendMessage(convoId, {
+          type: isImage ? 'image' : 'file',
+          text: isImage ? caption : (caption || fileName),
+          fileUrl,
+          fileName,
+        });
+        return;
+      }
+      if (text?.trim()) {
+        await chatApi.sendMessage(convoId, { text: text.trim() });
+      }
+    },
+    onSuccess: () => {
+      setMessage('');
+      setPendingFile(null);
+      refetchMessages();
+      qc.invalidateQueries(['conversations']);
+    },
   });
+
+  const canSend = !!(message.trim() || pendingFile);
+
+  const handleSend = () => {
+    if (!activeConvo || !canSend || sendMutation.isPending) return;
+    sendMutation.mutate({
+      file: pendingFile,
+      text: message,
+      convoId: activeConvo._id,
+    });
+  };
+
+  const handlePickFile = () => fileInputRef.current?.click();
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (file) setPendingFile(file);
+  };
+
+  useEffect(() => {
+    setPendingFile(null);
+  }, [activeConvo?._id]);
 
   // Socket: listen for messages in active conversation
   useEffect(() => {
@@ -230,7 +280,37 @@ export default function ChatPage() {
                       {!isMine && activeConvo.type === 'group' && (
                         <p className="text-xs font-semibold text-brand-navy mb-1">{msg.senderId?.name}</p>
                       )}
-                      <p>{msg.text}</p>
+                      {msg.type === 'image' && msg.fileUrl && (
+                        <a href={msg.fileUrl} target="_blank" rel="noopener noreferrer" className="block">
+                          <img
+                            src={msg.fileUrl}
+                            alt={msg.fileName || ''}
+                            className="max-w-full max-h-56 rounded-lg object-contain"
+                          />
+                        </a>
+                      )}
+                      {msg.type === 'file' && msg.fileUrl && (
+                        <>
+                          <a
+                            href={msg.fileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`inline-flex items-center gap-2 font-medium underline break-all ${
+                              isMine ? 'text-white' : 'text-brand-navy'
+                            }`}
+                          >
+                            <FileText size={16} className="flex-shrink-0" />
+                            <span>{msg.fileName || 'File'}</span>
+                          </a>
+                          {msg.text && msg.text !== msg.fileName && (
+                            <p className={`mt-1.5 text-sm ${isMine ? 'text-white/95' : 'text-gray-800'}`}>{msg.text}</p>
+                          )}
+                        </>
+                      )}
+                      {msg.type === 'image' && msg.text && (
+                        <p className={`mt-1.5 text-sm ${isMine ? 'text-white/95' : 'text-gray-800'}`}>{msg.text}</p>
+                      )}
+                      {msg.type === 'text' && msg.text && <p>{msg.text}</p>}
                       <p className={`text-xs mt-1 ${isMine ? 'text-white/60' : 'text-gray-400'}`}>{timeAgo(msg.createdAt)}</p>
                     </div>
                   </div>
@@ -240,15 +320,50 @@ export default function ChatPage() {
             </div>
 
             {/* Input */}
-            <div className="px-5 py-4 bg-white border-t border-gray-100">
-              <div className="flex items-center gap-3 bg-surface-secondary rounded-xl px-4 py-2.5">
+            <div className="px-5 py-4 bg-white border-t border-gray-100 space-y-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                accept=".jpg,.jpeg,.png,.gif,.webp,.heic,.heif,.pdf,.doc,.docx,.xlsx,.xls,.csv,.txt,.zip,.mp4,.mov"
+                onChange={handleFileChange}
+              />
+              {pendingFile && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-secondary border border-gray-200 text-sm text-gray-800">
+                  <FileText size={16} className="text-brand-navy flex-shrink-0" />
+                  <span className="flex-1 min-w-0 truncate font-medium" title={pendingFile.name}>{pendingFile.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setPendingFile(null)}
+                    className="p-1 rounded-md text-gray-500 hover:text-gray-800 hover:bg-white/80"
+                    aria-label="Remove attachment"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              )}
+              <div className="flex items-center gap-3 bg-neutral-700 rounded-xl px-4 py-2.5">
+                <button
+                  type="button"
+                  onClick={handlePickFile}
+                  disabled={sendMutation.isPending}
+                  title="Attach file"
+                  className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-lg text-white hover:text-white hover:bg-neutral-600/80 transition-colors disabled:opacity-40"
+                >
+                  <Upload size={18} />
+                </button>
                 <input value={message} onChange={e => setMessage(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && message.trim() && (e.preventDefault(), sendMutation.mutate())}
-                  placeholder={`Message ${getConvoName(activeConvo)}...`}
-                  className="flex-1 bg-transparent text-sm outline-none text-gray-800 placeholder:text-gray-400" />
-                <button onClick={() => message.trim() && sendMutation.mutate()} disabled={!message.trim() || sendMutation.isPending}
-                  className="w-8 h-8 bg-brand-navy text-white rounded-lg flex items-center justify-center hover:bg-brand-navy-dark transition-colors disabled:opacity-50">
-                  <Send size={14} />
+                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && canSend && (e.preventDefault(), handleSend())}
+                  placeholder={pendingFile ? 'Add a caption (optional)...' : `Message ${getConvoName(activeConvo)}...`}
+                  className="flex-1 bg-transparent text-sm outline-none text-black placeholder:text-white placeholder:opacity-90"
+                />
+                <button
+                  type="button"
+                  onClick={handleSend}
+                  disabled={!canSend || sendMutation.isPending}
+                  className="w-8 h-8 bg-brand-navy text-white rounded-lg flex items-center justify-center hover:bg-brand-navy-dark transition-colors disabled:opacity-50"
+                >
+                  {sendMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                 </button>
               </div>
             </div>

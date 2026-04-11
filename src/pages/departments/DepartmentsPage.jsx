@@ -9,23 +9,6 @@ import { Modal, Input, Select, PageLoader, EmptyState, Avatar, StatCard, Confirm
 /** Preset brand colors when the typed name matches a common department */
 const DEPT_COLORS = { SEO: '#10B981', 'Paid Ads': '#3B82F6', 'Social Media': '#8B5CF6', 'Web Dev': '#F59E0B', Sales: '#EF4444', Accounts: '#6B7280' };
 
-const PERMISSIONS = [
-  { key: 'view_clients',    label: 'View Clients'    },
-  { key: 'manage_clients',  label: 'Manage Clients'  },
-  { key: 'view_projects',   label: 'View Projects'   },
-  { key: 'manage_projects', label: 'Manage Projects' },
-  { key: 'view_tasks',      label: 'View Tasks'      },
-  { key: 'manage_tasks',    label: 'Manage Tasks'    },
-  { key: 'view_reports',    label: 'View Reports'    },
-  { key: 'view_finance',    label: 'View Finance'    },
-  { key: 'manage_team',     label: 'Manage Team'     },
-];
-const ROLE_PERMS = {
-  'Super Admin':       PERMISSIONS.map(p => p.key),
-  'Dept Manager':      ['view_clients','manage_clients','view_projects','manage_projects','view_tasks','manage_tasks','view_reports','manage_team'],
-  'Employee':          ['view_tasks','manage_tasks','view_projects'],
-};
-
 function DeptForm({ onClose, existing }) {
   const qc = useQueryClient();
   const { data: uData } = useQuery({ queryKey: ['users'], queryFn: () => usersApi.list().then(r => r.data) });
@@ -174,7 +157,6 @@ export default function DepartmentsPage() {
   // canManage comes from AuthContext — super_admin + admin + dept_manager
   const { canManage } = useAuth();
   const qc = useQueryClient();
-  const [tab,           setTab]           = useState('departments');
   const [modalOpen,     setModalOpen]     = useState(false);
   const [editDept,      setEditDept]      = useState(null);
   const [addMemberDept, setAddMemberDept] = useState(null);
@@ -202,16 +184,6 @@ export default function DepartmentsPage() {
           <p className="text-sm text-gray-500">{departments.length} departments · RBAC enforced</p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex gap-1 bg-surface-secondary p-1 rounded-lg">
-            {['departments', 'permissions'].map(t => (
-              <button key={t} onClick={() => setTab(t)}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                  tab === t ? 'bg-white text-brand-navy shadow-card' : 'text-gray-500 hover:text-gray-700'
-                }`}>
-                {t.charAt(0).toUpperCase() + t.slice(1)}
-              </button>
-            ))}
-          </div>
           {canManage && (
             <button className="btn-primary" onClick={() => { setEditDept(null); setModalOpen(true); }}>
               <Plus size={16} /> Add Dept
@@ -220,133 +192,98 @@ export default function DepartmentsPage() {
         </div>
       </div>
 
-      {tab === 'permissions' ? (
-        <div className="card">
-          <h3 className="text-sm font-semibold mb-1">RBAC Permission Matrix</h3>
-          <p className="text-xs text-gray-500 mb-5">Cross-department data isolation is enforced at API level. Super Admin has unrestricted access to everything.</p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr>
-                  <th className="text-left py-2 pr-6 text-gray-500 font-semibold">Permission</th>
-                  {Object.keys(ROLE_PERMS).map(r => (
-                    <th key={r} className="text-center py-2 px-4 text-gray-500 font-semibold">{r}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {PERMISSIONS.map(perm => (
-                  <tr key={perm.key} className="hover:bg-surface-secondary">
-                    <td className="py-2.5 pr-6 text-gray-700 font-medium">{perm.label}</td>
-                    {Object.entries(ROLE_PERMS).map(([role, perms]) => (
-                      <td key={role} className="py-2.5 px-4 text-center">
-                        {perms.includes(perm.key)
-                          ? <span className="text-green-600 text-base font-bold">✓</span>
-                          : <span className="text-gray-300 text-base">—</span>}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <StatCard label="Departments" value={departments.length} icon={Building2} />
-            <StatCard label="Total Members" value={departments.reduce((s, d) => s + (d.members?.length || 0), 0)} icon={Users} />
-            <StatCard label="Active" value={departments.filter(d => d.isActive).length} color="text-green-600" />
-          </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <StatCard label="Departments" value={departments.length} icon={Building2} />
+        <StatCard label="Total Members" value={departments.reduce((s, d) => s + (d.members?.length || 0), 0)} icon={Users} />
+        <StatCard label="Active" value={departments.filter(d => d.isActive).length} color="text-green-600" />
+      </div>
 
-          {departments.length === 0 ? (
-            <EmptyState icon={Building2} title="No departments" description="Create your first department to get started" />
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-              {departments.map(dept => (
-                <div key={dept._id} className="card hover:shadow-card-hover transition-shadow">
-                  {/* Header */}
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg flex-shrink-0"
-                        style={{ backgroundColor: dept.color || '#0D1B8E' }}>
-                        {dept.name?.slice(0, 2).toUpperCase()}
+      {departments.length === 0 ? (
+        <EmptyState icon={Building2} title="No departments" description="Create your first department to get started" />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+          {departments.map(dept => (
+            <div key={dept._id} className="card hover:shadow-card-hover transition-shadow">
+              {/* Header */}
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg flex-shrink-0"
+                    style={{ backgroundColor: dept.color || '#0D1B8E' }}>
+                    {dept.name?.slice(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-900">{dept.name}</h3>
+                    {dept.description && <p className="text-xs text-gray-500 mt-0.5">{dept.description}</p>}
+                    {dept.roles?.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {dept.roles.map((r, ri) => (
+                          <span key={`${r}-${ri}`} className="text-[10px] px-2 py-0.5 rounded-full bg-surface-secondary text-gray-600 font-medium">{r}</span>
+                        ))}
                       </div>
-                      <div>
-                        <h3 className="text-sm font-bold text-gray-900">{dept.name}</h3>
-                        {dept.description && <p className="text-xs text-gray-500 mt-0.5">{dept.description}</p>}
-                        {dept.roles?.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1.5">
-                            {dept.roles.map((r, ri) => (
-                              <span key={`${r}-${ri}`} className="text-[10px] px-2 py-0.5 rounded-full bg-surface-secondary text-gray-600 font-medium">{r}</span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    {canManage && (
-                      <button onClick={() => { setEditDept(dept); setModalOpen(true); }}
-                        className="text-xs text-brand-navy hover:underline font-medium">Edit</button>
                     )}
                   </div>
+                </div>
+                {canManage && (
+                  <button onClick={() => { setEditDept(dept); setModalOpen(true); }}
+                    className="text-xs text-brand-navy hover:underline font-medium">Edit</button>
+                )}
+              </div>
 
-                  {/* Head */}
-                  {dept.headId && (
-                    <div className="flex items-center gap-2 mb-3 p-2.5 bg-surface-secondary rounded-xl">
-                      <Avatar user={dept.headId} size="sm" />
-                      <div>
-                        <p className="text-xs font-semibold text-gray-800">{dept.headId.name}</p>
-                        <p className="text-xs text-gray-400">Department Head</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Members */}
+              {/* Head */}
+              {dept.headId && (
+                <div className="flex items-center gap-2 mb-3 p-2.5 bg-surface-secondary rounded-xl">
+                  <Avatar user={dept.headId} size="sm" />
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs font-semibold text-gray-600">{dept.members?.length || 0} Members</p>
-                      {canManage && (
-                        <button onClick={() => setAddMemberDept(dept)}
-                          className="flex items-center gap-1 text-xs text-brand-navy hover:underline font-medium">
-                          <UserPlus size={11} /> Add
+                    <p className="text-xs font-semibold text-gray-800">{dept.headId.name}</p>
+                    <p className="text-xs text-gray-400">Department Head</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Members */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-gray-600">{dept.members?.length || 0} Members</p>
+                  {canManage && (
+                    <button onClick={() => setAddMemberDept(dept)}
+                      className="flex items-center gap-1 text-xs text-brand-navy hover:underline font-medium">
+                      <UserPlus size={11} /> Add
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                  {dept.members?.length === 0 && (
+                    <p className="text-xs text-gray-400 text-center py-3">No members yet</p>
+                  )}
+                  {dept.members?.map(m => (
+                    <div key={m._id} className="flex items-center justify-between group py-0.5">
+                      <div className="flex items-center gap-2">
+                        <Avatar user={m} size="xs" />
+                        <div>
+                          <p className="text-xs font-medium text-gray-800">{m.name}</p>
+                          <p className="text-xs text-gray-400">{m.departmentRole || m.role?.replace(/_/g, ' ')}</p>
+                        </div>
+                      </div>
+                      {canManage && String(m._id) !== String(dept.headId?._id) && (
+                        <button
+                          onClick={() => setRemoveMember({ deptId: dept._id, userId: m._id, name: m.name })}
+                          className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all rounded">
+                          <UserMinus size={12} />
                         </button>
                       )}
                     </div>
-                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                      {dept.members?.length === 0 && (
-                        <p className="text-xs text-gray-400 text-center py-3">No members yet</p>
-                      )}
-                      {dept.members?.map(m => (
-                        <div key={m._id} className="flex items-center justify-between group py-0.5">
-                          <div className="flex items-center gap-2">
-                            <Avatar user={m} size="xs" />
-                            <div>
-                              <p className="text-xs font-medium text-gray-800">{m.name}</p>
-                              <p className="text-xs text-gray-400">{m.departmentRole || m.role?.replace(/_/g, ' ')}</p>
-                            </div>
-                          </div>
-                          {canManage && String(m._id) !== String(dept.headId?._id) && (
-                            <button
-                              onClick={() => setRemoveMember({ deptId: dept._id, userId: m._id, name: m.name })}
-                              className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all rounded">
-                              <UserMinus size={12} />
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="pt-3 mt-2 border-t border-gray-100">
-                    <p className="text-xs text-gray-400">
-                      Members only see <span className="font-medium text-gray-600">{dept.name}</span> data
-                    </p>
-                  </div>
+                  ))}
                 </div>
-              ))}
+              </div>
+
+              <div className="pt-3 mt-2 border-t border-gray-100">
+                <p className="text-xs text-gray-400">
+                  Members only see <span className="font-medium text-gray-600">{dept.name}</span> data
+                </p>
+              </div>
             </div>
-          )}
-        </>
+          ))}
+        </div>
       )}
 
       <Modal open={modalOpen} onClose={() => { setModalOpen(false); setEditDept(null); }}
