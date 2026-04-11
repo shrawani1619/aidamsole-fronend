@@ -40,9 +40,10 @@ export const Badge = ({ children, variant = 'gray', className = '' }) => {
 // ── Modal ─────────────────────────────────────────────────────────────────────
 export const Modal = ({ open, onClose, title, children, size = 'md', footer }) => {
   if (!open) return null;
+  const sizeClass = size === 'xl' ? 'modal-xl' : size === 'lg' ? 'modal-lg' : 'modal';
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className={size === 'lg' ? 'modal-lg' : 'modal'}>
+      <div className={sizeClass}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <h2 className="text-base font-semibold text-gray-900">{title}</h2>
           <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">

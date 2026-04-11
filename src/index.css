@@ -89,6 +89,9 @@
   .modal-lg {
     @apply bg-white rounded-2xl shadow-modal w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slide-in;
   }
+  .modal-xl {
+    @apply bg-white rounded-2xl shadow-modal w-full max-w-5xl max-h-[90vh] overflow-y-auto animate-slide-in;
+  }
 }
 
 /* Health score colors */

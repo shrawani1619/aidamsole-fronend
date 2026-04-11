@@ -13,7 +13,7 @@ const pageTitles = {
   '/reports': 'Reports',
   '/finance': 'Finance',
   '/chat': 'Chat',
-  '/settings': 'Settings',
+  '/profile': 'Profile',
 };
 
 export default function AppLayout() {

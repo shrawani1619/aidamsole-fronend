@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Lock, Mail, ArrowRight } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Spinner } from '../../components/ui';
@@ -103,6 +103,11 @@ export default function LoginPage() {
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                   {showPwd ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
+              </div>
+              <div className="mt-1.5 text-right">
+                <Link to="/forgot-password" className="text-xs font-medium text-brand-navy hover:underline">
+                  Forgot password?
+                </Link>
               </div>
             </div>
 

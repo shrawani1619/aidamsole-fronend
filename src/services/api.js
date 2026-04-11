@@ -12,12 +12,16 @@ const api = axios.create({
 
 // Attach JWT token to every request
 api.interceptors.request.use(
-  config => {
+  (config) => {
     const token = localStorage.getItem('aidamsole_token');
     if (token) config.headers.Authorization = `Bearer ${token}`;
+    // Default axios Content-Type is application/json — that breaks multipart uploads (multer sees no file).
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
+    }
     return config;
   },
-  err => Promise.reject(err)
+  (err) => Promise.reject(err)
 );
 
 // Global response handler — only redirect on 401, never auto-block 403
@@ -55,10 +59,12 @@ export default api;
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const authApi = {
-  login:         (data) => api.post('/auth/login', data),
-  me:            ()     => api.get('/auth/me'),
-  updatePassword:(data) => api.put('/auth/update-password', data),
-  updateProfile: (data) => api.put('/auth/update-profile', data),
+  login:          (data) => api.post('/auth/login', data),
+  me:             ()     => api.get('/auth/me'),
+  forgotPassword: (data) => api.post('/auth/forgot-password', data),
+  resetPassword:  (data) => api.post('/auth/reset-password', data),
+  updatePassword: (data) => api.put('/auth/update-password', data),
+  updateProfile:  (data) => api.put('/auth/update-profile', data),
 };
 
 // ── Users ─────────────────────────────────────────────────────────────────────
@@ -69,6 +75,15 @@ export const usersApi = {
   update:        (id, data) => api.put(`/users/${id}`, data),
   delete:        (id)     => api.delete(`/users/${id}`),
   resetPassword: (id, data) => api.put(`/users/${id}/reset-password`, data),
+  updatePermissions: (id, data) => api.put(`/users/${id}/permissions`, data),
+};
+
+// ── Permissions (admin) — schema / defaults / user detail (alias of users permissions) ──
+export const permissionsApi = {
+  schema:   () => api.get('/permissions/schema'),
+  defaults: (role) => api.get(`/permissions/defaults/${encodeURIComponent(role)}`),
+  getUser:  (userId) => api.get(`/permissions/user/${userId}`),
+  updateUser: (userId, data) => api.put(`/permissions/user/${userId}`, data),
 };
 
 // ── Departments ───────────────────────────────────────────────────────────────
@@ -164,8 +179,17 @@ export const notificationsApi = {
   delete:     (id)     => api.delete(`/notifications/${id}`),
 };
 
-// ── Upload ────────────────────────────────────────────────────────────────────
+// ── Upload (multipart — let axios set FormData boundary; do not set Content-Type manually)
 export const uploadApi = {
-  single:   (formData) => api.post('/upload/single',   formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
-  multiple: (formData) => api.post('/upload/multiple', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  single: (file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api.post('/upload/single', fd);
+  },
+  multiple: (files) => {
+    const fd = new FormData();
+    const list = Array.isArray(files) ? files : [files];
+    list.forEach((f) => fd.append('files', f));
+    return api.post('/upload/multiple', fd);
+  },
 };

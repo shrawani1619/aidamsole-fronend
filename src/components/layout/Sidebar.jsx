@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, FolderKanban, CheckSquare, Building2,
-  BarChart3, DollarSign, MessageSquare, Settings, LogOut,
-  ChevronLeft, ChevronRight, UserCircle, Menu, X
+  BarChart3, IndianRupee, MessageSquare, LogOut,
+  ChevronLeft, ChevronRight, UserCircle, User, Menu, X, Shield
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Avatar } from '../ui';
@@ -12,37 +12,39 @@ const LOGO_SRC = `${import.meta.env.BASE_URL}logo.png`;
 
 // All nav items — visibility controlled by canSee()
 const navItems = [
-  { path: '/dashboard',   icon: LayoutDashboard, label: 'Dashboard'   },
-  { path: '/clients',     icon: UserCircle,      label: 'Clients'     },
-  { path: '/projects',    icon: FolderKanban,    label: 'Projects'    },
-  { path: '/tasks',       icon: CheckSquare,     label: 'Tasks'       },
-  { path: '/departments', icon: Building2,       label: 'Departments', adminOnly: true },
-  { path: '/team',        icon: Users,           label: 'Team',        managerUp: true },
-  { path: '/reports',     icon: BarChart3,       label: 'Reports'     },
-  { path: '/finance',     icon: DollarSign,      label: 'Finance',    adminOnly: true },
-  { path: '/chat',        icon: MessageSquare,   label: 'Chat'        },
+  { path: '/dashboard',   icon: LayoutDashboard, label: 'Dashboard',   module: 'dashboard' },
+  { path: '/clients',     icon: UserCircle,      label: 'Clients',     module: 'clients' },
+  { path: '/projects',    icon: FolderKanban,    label: 'Projects',    module: 'projects' },
+  { path: '/tasks',       icon: CheckSquare,     label: 'Tasks',       module: 'tasks' },
+  { path: '/departments', icon: Building2,       label: 'Departments', module: 'departments' },
+  { path: '/team',        icon: Users,           label: 'Team',        module: 'team' },
+  { path: '/permissions', icon: Shield,          label: 'Permissions', adminOnly: true },
+  { path: '/reports',     icon: BarChart3,       label: 'Reports',     module: 'reports' },
+  { path: '/finance',     icon: IndianRupee,      label: 'Finance',     module: 'finance' },
+  { path: '/chat',        icon: MessageSquare,   label: 'Chat',        module: 'chat' },
 ];
 
 export default function Sidebar() {
-  const { user, logout, isAdmin, isManager } = useAuth();
+  const { user, logout, isAdmin, isManager, canModule } = useAuth();
   const navigate = useNavigate();
   const [collapsed, setCollapsed]   = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const handleLogout = () => { logout(); navigate('/login'); };
 
-  // Determine which items this user can see
-  const visibleItems = navItems.filter(item => {
-    if (item.adminOnly) return isAdmin;          // super_admin + admin
-    if (item.managerUp) return isAdmin || isManager; // + dept_manager
-    return true;                                  // everyone
+  // Nav visibility: module view ACL + legacy admin/manager flags
+  const visibleItems = navItems.filter((item) => {
+    if (item.adminOnly) return isAdmin;
+    if (item.managerUp) return isAdmin || isManager;
+    if (item.module) return canModule(item.module, 'view');
+    return true;
   });
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
 
       {/* Logo */}
-      <div className={`flex items-center gap-3 px-4 py-6 border-b border-white/10 ${collapsed ? 'justify-center' : ''}`}>
+      <div className={`flex items-center gap-3 px-4 py-6 bg-white border-b border-gray-200/90 ${collapsed ? 'justify-center' : ''}`}>
         <img
           src={LOGO_SRC}
           alt="AiDamsole"
@@ -68,24 +70,30 @@ export default function Sidebar() {
       {/* Footer */}
       <div className="px-3 py-4 border-t border-white/10 space-y-1">
         <NavLink
-          to="/settings"
+          to="/profile"
           onClick={() => setMobileOpen(false)}
           className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
         >
-          <Settings size={18} />
-          {!collapsed && <span>Settings</span>}
+          <User size={18} />
+          {!collapsed && <span>Profile</span>}
         </NavLink>
 
         {/* User pill */}
-        <div className={`flex items-center gap-3 px-3 py-2 rounded-lg mt-1 ${collapsed ? 'justify-center' : ''}`}>
+        <NavLink
+          to="/profile"
+          onClick={() => setMobileOpen(false)}
+          className={`flex items-center gap-3 px-3 py-2 rounded-lg mt-1 hover:bg-white/5 transition-colors ${collapsed ? 'justify-center' : ''}`}
+        >
           <Avatar user={user} size="sm" />
           {!collapsed && (
             <div className="flex-1 min-w-0">
               <p className="text-white text-xs font-medium truncate">{user?.name}</p>
-              <p className="text-gray-400 text-xs truncate capitalize">{user?.role?.replace(/_/g, ' ')}</p>
+              <span className="mt-1 inline-flex max-w-full items-center rounded-md bg-blue-500 px-2 py-0.5 text-[10px] font-semibold capitalize text-white shadow-sm truncate">
+                {user?.role?.replace(/_/g, ' ') || '—'}
+              </span>
             </div>
           )}
-        </div>
+        </NavLink>
 
         <button
           onClick={handleLogout}

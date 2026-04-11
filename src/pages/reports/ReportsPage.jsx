@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { BarChart2, TrendingUp, Users, Activity, RefreshCw } from 'lucide-react';
+import { BarChart2, TrendingUp, Users, Activity, RefreshCw, ShieldOff } from 'lucide-react';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import {
   Chart as ChartJS, CategoryScale, LinearScale, BarElement,
   ArcElement, Title, Tooltip, Legend
 } from 'chart.js';
 import { reportsApi } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import { PageLoader, StatCard, Tabs, Avatar } from '../../components/ui';
 import { formatINR, formatDate, healthBg, slugToLabel } from '../../utils/helpers';
 
@@ -32,8 +33,6 @@ const RANGES = [
   { value: 'yearly',  label: 'This Year'  },
 ];
 
-// All report tabs visible to all authenticated users
-// Backend's departmentScope ensures employees only see their own dept data
 const REPORT_TABS = [
   { value: 'financial',    label: 'Financial',    icon: TrendingUp },
   { value: 'client',       label: 'Client',       icon: Users      },
@@ -41,7 +40,25 @@ const REPORT_TABS = [
   { value: 'operational',  label: 'Operational',  icon: BarChart2  },
 ];
 
+/** Tab visible only if Reports field + module access matches API rules */
+function useVisibleReportTabs() {
+  const { canModule, canViewField } = useAuth();
+  return useMemo(() => {
+    if (!canModule('reports', 'view')) return [];
+    return REPORT_TABS.filter((tab) => {
+      if (!canViewField('reports', tab.value)) return false;
+      if (tab.value === 'financial') return canModule('finance', 'view');
+      if (tab.value === 'client') return canModule('clients', 'view');
+      if (tab.value === 'team') return canModule('team', 'view');
+      return true;
+    });
+  }, [canModule, canViewField]);
+}
+
 export default function ReportsPage() {
+  const { canModule, canViewField } = useAuth();
+  const visibleTabs = useVisibleReportTabs();
+
   const [activeReport, setActiveReport] = useState('financial');
   const [range, setRange]               = useState('monthly');
   const [startDate, setStartDate]       = useState('');
@@ -49,29 +66,37 @@ export default function ReportsPage() {
 
   const params = { range, ...(startDate && { startDate }), ...(endDate && { endDate }) };
 
-  // All queries always enabled — backend returns scoped data per role
+  useEffect(() => {
+    if (!visibleTabs.length) return;
+    if (!visibleTabs.some((t) => t.value === activeReport)) {
+      setActiveReport(visibleTabs[0].value);
+    }
+  }, [visibleTabs, activeReport]);
+
+  const tabActive = (key) => visibleTabs.some((t) => t.value === key) && activeReport === key;
+
   const { data: finData,    isLoading: finLoading,    refetch: refetchFin    } = useQuery({
     queryKey: ['report-financial',   params],
     queryFn:  () => reportsApi.financial(params).then(r => r.data.data),
-    enabled:  activeReport === 'financial',
+    enabled:  tabActive('financial'),
   });
 
   const { data: clientData, isLoading: clientLoading, refetch: refetchClient } = useQuery({
     queryKey: ['report-client',      params],
     queryFn:  () => reportsApi.clientPerformance(params).then(r => r.data.data),
-    enabled:  activeReport === 'client',
+    enabled:  tabActive('client'),
   });
 
   const { data: teamData,   isLoading: teamLoading,   refetch: refetchTeam   } = useQuery({
     queryKey: ['report-team',        params],
     queryFn:  () => reportsApi.teamPerformance(params).then(r => r.data.data),
-    enabled:  activeReport === 'team',
+    enabled:  tabActive('team'),
   });
 
   const { data: opsData,    isLoading: opsLoading,    refetch: refetchOps    } = useQuery({
     queryKey: ['report-ops',         params],
     queryFn:  () => reportsApi.operational(params).then(r => r.data.data),
-    enabled:  activeReport === 'operational',
+    enabled:  tabActive('operational'),
   });
 
   const isLoading =
@@ -84,28 +109,57 @@ export default function ReportsPage() {
     if      (activeReport === 'financial')   refetchFin();
     else if (activeReport === 'client')      refetchClient();
     else if (activeReport === 'team')        refetchTeam();
-    else                                     refetchOps();
+    else if (activeReport === 'operational')  refetchOps();
   };
+
+  const showMrrOnFinancial = canViewField('dashboard', 'mrr');
+
+  if (!canModule('reports', 'view')) {
+    return (
+      <div className="card p-10 text-center text-gray-600">
+        <ShieldOff className="mx-auto mb-3 text-gray-300" size={40} />
+        <p className="font-medium text-gray-800">No access to Reports</p>
+        <p className="text-sm text-gray-500 mt-1">Ask an administrator to enable Reports → View for your account.</p>
+      </div>
+    );
+  }
+
+  if (visibleTabs.length === 0) {
+    return (
+      <div className="space-y-5 animate-fade-in">
+        <div className="page-header">
+          <div>
+            <h2 className="page-title">Reports</h2>
+            <p className="text-sm text-gray-500">Analytics &amp; insights</p>
+          </div>
+        </div>
+        <div className="card p-10 text-center text-gray-600">
+          <p className="font-medium text-gray-800">No report sections enabled</p>
+          <p className="text-sm text-gray-500 mt-1 max-w-md mx-auto">
+            Your role does not include access to the Financial, Client, Team, or Operational reports (or they were disabled in Permissions). Contact an admin if this is unexpected.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5 animate-fade-in">
-      {/* Header */}
       <div className="page-header">
         <div>
           <h2 className="page-title">Reports</h2>
-          <p className="text-sm text-gray-500">Analytics &amp; insights</p>
+          <p className="text-sm text-gray-500">Analytics &amp; insights — sections follow your module and field permissions</p>
         </div>
-        <button onClick={refetch} className="btn-secondary text-xs">
+        <button type="button" onClick={refetch} className="btn-secondary text-xs">
           <RefreshCw size={13} /> Refresh
         </button>
       </div>
 
-      {/* Controls */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <Tabs active={activeReport} onChange={setActiveReport} tabs={REPORT_TABS} />
+        <Tabs active={activeReport} onChange={setActiveReport} tabs={visibleTabs} />
         <div className="flex flex-wrap items-center gap-2">
           {RANGES.map(r => (
-            <button key={r.value} onClick={() => setRange(r.value)}
+            <button key={r.value} type="button" onClick={() => setRange(r.value)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                 range === r.value
                   ? 'bg-brand-navy text-white'
@@ -123,12 +177,13 @@ export default function ReportsPage() {
 
       {isLoading ? <PageLoader /> : (
         <>
-          {/* ── FINANCIAL ──────────────────────────────────────────────────── */}
           {activeReport === 'financial' && finData && (
             <div className="space-y-5">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <StatCard label="Revenue Collected" value={formatINR(finData.summary.totalRevenue)} color="text-green-600" icon={TrendingUp} />
-                <StatCard label="MRR"               value={formatINR(finData.summary.mrr)} icon={BarChart2} />
+                {showMrrOnFinancial && (
+                  <StatCard label="MRR" value={formatINR(finData.summary.mrr)} icon={BarChart2} />
+                )}
                 <StatCard label="Outstanding"       value={formatINR(finData.summary.outstanding)} color="text-amber-600" />
                 <StatCard label="Overdue"            value={formatINR(finData.summary.overdueAmount)} color="text-red-600" />
               </div>
@@ -188,7 +243,6 @@ export default function ReportsPage() {
             </div>
           )}
 
-          {/* ── CLIENT PERFORMANCE ─────────────────────────────────────────── */}
           {activeReport === 'client' && clientData && (
             <div className="space-y-5">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -265,7 +319,6 @@ export default function ReportsPage() {
             </div>
           )}
 
-          {/* ── TEAM PERFORMANCE ───────────────────────────────────────────── */}
           {activeReport === 'team' && teamData && (
             <div className="space-y-5">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -327,7 +380,6 @@ export default function ReportsPage() {
             </div>
           )}
 
-          {/* ── OPERATIONAL ────────────────────────────────────────────────── */}
           {activeReport === 'operational' && opsData && (
             <div className="space-y-5">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

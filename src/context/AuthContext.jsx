@@ -64,10 +64,25 @@ export const AuthProvider = ({ children }) => {
   // canManage: super_admin, admin, and dept_manager can all create/edit
   const canManage    = isAdmin || isManager;
 
+  const canModule = useCallback((module, action) => {
+    if (user?.role === 'super_admin' || user?.role === 'admin') return true;
+    return user?.effectiveModulePermissions?.[module]?.[action] === true;
+  }, [user]);
+
+  /** Field-level flags on any module (dashboard KPIs, report tabs, etc.). Missing field = allowed when module view is true. */
+  const canViewField = useCallback((module, fieldKey) => {
+    if (user?.role === 'super_admin' || user?.role === 'admin') return true;
+    const m = user?.effectiveModulePermissions?.[module];
+    if (!m?.view) return false;
+    if (m.fields?.[fieldKey] === false) return false;
+    return true;
+  }, [user]);
+
   return (
     <AuthContext.Provider value={{
       user, loading, login, logout, updateUser,
-      isSuperAdmin, isAdmin, isManager, canManage
+      isSuperAdmin, isAdmin, isManager, canManage,
+      canModule, canViewField,
     }}>
       {children}
     </AuthContext.Provider>

@@ -299,7 +299,7 @@ function UserForm({ onClose, existing }) {
 }
 
 export default function TeamPage() {
-  const { isAdmin, isSuperAdmin } = useAuth();
+  const { isAdmin, isSuperAdmin, canModule } = useAuth();
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
@@ -331,7 +331,7 @@ export default function TeamPage() {
           <h2 className="page-title">Team</h2>
           <p className="text-sm text-gray-500">{users.length} team members</p>
         </div>
-        {(isAdmin || isSuperAdmin) && (
+        {canModule('team', 'create') && (
           <button className="btn-primary" onClick={() => { setEditUser(null); setModalOpen(true); }}>
             <Plus size={16} /> Add Member
           </button>

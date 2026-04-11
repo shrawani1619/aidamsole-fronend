@@ -5,6 +5,8 @@ import { SocketProvider } from './context/SocketContext';
 import AppLayout from './components/layout/AppLayout';
 
 import LoginPage from './pages/auth/LoginPage';
+import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
+import ResetPasswordPage from './pages/auth/ResetPasswordPage';
 import DashboardPage from './pages/dashboard/DashboardPage';
 import ClientsPage from './pages/clients/ClientsPage';
 import ProjectsPage from './pages/projects/ProjectsPage';
@@ -14,7 +16,9 @@ import ReportsPage from './pages/reports/ReportsPage';
 import FinancePage from './pages/finance/FinancePage';
 import ChatPage from './pages/chat/ChatPage';
 import TeamPage from './pages/team/TeamPage';
-import SettingsPage from './pages/settings/SettingsPage';
+import PermissionsPage from './pages/permissions/PermissionsPage';
+import ProfilePage from './pages/profile/ProfilePage';
+import ModuleGate from './components/ModuleGate';
 import { Spinner } from './components/ui';
 
 // Single PrivateRoute — just checks login. NO role-based redirects.
@@ -49,6 +53,9 @@ export default function App() {
         <Routes>
           {/* Public */}
           <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
+          <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
+          {/* Reset link from email — no PublicRoute so logged-in users can still complete reset */}
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
 
           {/* All protected routes — NO adminOnly gates on any route */}
           <Route
@@ -62,16 +69,18 @@ export default function App() {
             }
           >
             <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="dashboard"   element={<DashboardPage />} />
-            <Route path="clients"     element={<ClientsPage />} />
-            <Route path="projects"    element={<ProjectsPage />} />
-            <Route path="tasks"       element={<TasksPage />} />
-            <Route path="departments" element={<DepartmentsPage />} />
-            <Route path="team"        element={<TeamPage />} />
-            <Route path="reports"     element={<ReportsPage />} />
-            <Route path="finance"     element={<FinancePage />} />
-            <Route path="chat"        element={<ChatPage />} />
-            <Route path="settings"    element={<SettingsPage />} />
+            <Route path="dashboard"   element={<ModuleGate module="dashboard"><DashboardPage /></ModuleGate>} />
+            <Route path="clients"     element={<ModuleGate module="clients"><ClientsPage /></ModuleGate>} />
+            <Route path="projects"    element={<ModuleGate module="projects"><ProjectsPage /></ModuleGate>} />
+            <Route path="tasks"       element={<ModuleGate module="tasks"><TasksPage /></ModuleGate>} />
+            <Route path="departments" element={<ModuleGate module="departments"><DepartmentsPage /></ModuleGate>} />
+            <Route path="team"        element={<ModuleGate module="team"><TeamPage /></ModuleGate>} />
+            <Route path="permissions" element={<PermissionsPage />} />
+            <Route path="reports"     element={<ModuleGate module="reports"><ReportsPage /></ModuleGate>} />
+            <Route path="finance"     element={<ModuleGate module="finance"><FinancePage /></ModuleGate>} />
+            <Route path="chat"        element={<ModuleGate module="chat"><ChatPage /></ModuleGate>} />
+            <Route path="profile"     element={<ProfilePage />} />
+            <Route path="settings"    element={<Navigate to="/profile" replace />} />
           </Route>
 
           {/* Catch-all */}

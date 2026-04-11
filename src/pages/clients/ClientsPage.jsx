@@ -65,8 +65,13 @@ function ClientForm({ onClose, existing }) {
       <div className="grid grid-cols-2 gap-4">
         <Select label="Status" value={form.status} onChange={e => set('status', e.target.value)}
           options={STATUS_OPTS.slice(1)} />
-        <Input label="Monthly Contract Value (₹)" type="number" value={form.contractValue}
-          onChange={e => set('contractValue', e.target.value)} placeholder="45000" />
+        <div>
+          <Input label="Monthly Contract Value (₹)" type="number" value={form.contractValue}
+            onChange={e => set('contractValue', e.target.value)} placeholder="45000" />
+          <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+            Account-level monthly retainer. Used for MRR and finance reports—not the same as a single project’s delivery budget.
+          </p>
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <Input label="Contract Start" type="date" value={form.contractStart} onChange={e => set('contractStart', e.target.value)} />
@@ -113,7 +118,7 @@ function ClientForm({ onClose, existing }) {
 }
 
 export default function ClientsPage() {
-  const { canManage } = useAuth();
+  const { canManage, canModule } = useAuth();
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
@@ -148,7 +153,7 @@ export default function ClientsPage() {
           <h2 className="page-title">Clients</h2>
           <p className="text-sm text-gray-500">{total} total clients</p>
         </div>
-        {canManage && (
+        {canModule('clients', 'create') && (
           <button className="btn-primary" onClick={() => { setEditClient(null); setModalOpen(true); }}>
             <Plus size={16} /> Add Client
           </button>

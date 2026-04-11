@@ -95,7 +95,7 @@ function DeptForm({ onClose, existing }) {
             }}
             placeholder="e.g. SEO Executive, Content Writer"
           />
-          <button type="button" onClick={addRoleFromDraft} className="btn-secondary py-2 px-3 text-sm shrink-0 whitespace-nowrap flex items-center gap-1.5">
+          <button type="button" onClick={addRoleFromDraft} className="btn-primary py-2 px-3 text-sm shrink-0 whitespace-nowrap">
             <Plus size={14} /> Add role
           </button>
         </div>

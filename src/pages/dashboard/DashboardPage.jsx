@@ -1,33 +1,37 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Users, FolderKanban, CheckSquare, DollarSign, TrendingUp, AlertTriangle, Clock, ArrowRight } from 'lucide-react';
+import { Users, FolderKanban, CheckSquare, IndianRupee, TrendingUp, AlertTriangle, Clock, ArrowRight } from 'lucide-react';
 import { dashboardApi, reportsApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { StatCard, PageLoader, Avatar, ProgressBar } from '../../components/ui';
 import { formatINR, formatDate, healthBg, statusColors, slugToLabel, isOverdue } from '../../utils/helpers';
 
 export default function Dashboard() {
-  const { user, isAdmin } = useAuth();
+  const { user, canModule, canViewField } = useAuth();
+  const canDashboard = canModule('dashboard', 'view');
 
   const { data: dash, isLoading } = useQuery({
     queryKey: ['dashboard'],
     queryFn:  () => dashboardApi.get().then(r => r.data.data),
     refetchInterval: 60000,
+    enabled: canDashboard,
   });
 
-  // Always fetch insights — backend returns empty/scoped data for non-admins gracefully
   const { data: insights } = useQuery({
     queryKey: ['super-admin-insights'],
     queryFn:  () => reportsApi.superAdminInsights().then(r => r.data.data),
     refetchInterval: 120000,
-    retry: false, // Don't retry if non-admin gets an error
+    retry: false,
+    enabled: canDashboard,
   });
 
   if (isLoading) return <PageLoader />;
 
   const d = dash || {};
   const i = insights;
+  const kpis = i?.kpis || {};
+  const hasInsightKpis = i && Object.keys(kpis).length > 0;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -41,29 +45,39 @@ export default function Dashboard() {
             {user?.departmentId?.name ? `${user.departmentId.name} Department` : 'Agency Overview'} · {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
         </div>
-        <Link to="/reports" className="btn-secondary text-xs hidden sm:flex">
-          Reports <ArrowRight size={13} />
-        </Link>
+        {canModule('reports', 'view') && (
+          <Link to="/reports" className="btn-secondary text-xs hidden sm:flex">
+            Reports <ArrowRight size={13} />
+          </Link>
+        )}
       </div>
 
-      {/* Admin KPIs (only shown when insights API returns data) */}
-      {i && (
+      {/* Agency KPI row — filtered by backend + field permissions (e.g. hide MRR) */}
+      {hasInsightKpis && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard label="MRR" value={formatINR(i.kpis.mrr)} icon={DollarSign} color="text-green-600"
-            sub={`${i.kpis.revenueGrowth >= 0 ? '+' : ''}${i.kpis.revenueGrowth}% vs last month`}
-            trend={i.kpis.revenueGrowth} />
-          <StatCard label="Active Clients" value={i.kpis.activeClients} icon={Users}
-            sub={`${i.kpis.churnRate}% churn rate`} />
-          <StatCard label="This Month" value={formatINR(i.kpis.thisMonthRevenue)} icon={TrendingUp}
-            sub="Revenue collected" color="text-brand-navy" />
-          <StatCard label="Delayed Tasks" value={i.kpis.delayedTasks} icon={AlertTriangle}
-            sub={`${i.kpis.taskDelayRate}% delay rate`}
-            color={i.kpis.delayedTasks > 5 ? 'text-red-600' : 'text-amber-600'} />
+          {'mrr' in kpis && canViewField('dashboard', 'mrr') && (
+            <StatCard label="MRR" value={formatINR(kpis.mrr)} icon={IndianRupee} color="text-green-600"
+              sub={`${kpis.revenueGrowth >= 0 ? '+' : ''}${kpis.revenueGrowth}% vs last month`}
+              trend={kpis.revenueGrowth} />
+          )}
+          {'activeClients' in kpis && canViewField('dashboard', 'activeClients') && (
+            <StatCard label="Active Clients" value={kpis.activeClients} icon={Users}
+              sub={`${kpis.churnRate}% churn rate`} />
+          )}
+          {'thisMonthRevenue' in kpis && canViewField('dashboard', 'thisMonthRevenue') && (
+            <StatCard label="This Month" value={formatINR(kpis.thisMonthRevenue)} icon={TrendingUp}
+              sub="Revenue collected" color="text-brand-navy" />
+          )}
+          {'delayedTasks' in kpis && canViewField('dashboard', 'delayedTasks') && (
+            <StatCard label="Delayed Tasks" value={kpis.delayedTasks} icon={AlertTriangle}
+              sub={`${kpis.taskDelayRate}% delay rate`}
+              color={kpis.delayedTasks > 5 ? 'text-red-600' : 'text-amber-600'} />
+          )}
         </div>
       )}
 
-      {/* General stats (always shown) */}
-      {!i && (
+      {/* Scoped stats when user has no agency KPIs */}
+      {!hasInsightKpis && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatCard label="Active Clients"  value={d.clients?.active || 0}            icon={Users} />
           <StatCard label="Active Projects" value={d.projects?.active || 0}           icon={FolderKanban} />
@@ -127,11 +141,11 @@ export default function Dashboard() {
             </Link>
           </div>
 
-          {i && (
+          {i && canViewField('dashboard', 'clientHealth') && (
             <div className="grid grid-cols-3 gap-2 mb-4">
               {[
                 { label: 'Green', count: i.topClients?.length || 0,   color: 'bg-green-500' },
-                { label: 'Amber', count: Math.max(0, (i.kpis.activeClients || 0) - (i.topClients?.length || 0) - (i.riskClients?.length || 0)), color: 'bg-amber-500' },
+                { label: 'Amber', count: Math.max(0, (kpis.activeClients || 0) - (i.topClients?.length || 0) - (i.riskClients?.length || 0)), color: 'bg-amber-500' },
                 { label: 'Red',   count: i.riskClients?.length || 0,  color: 'bg-red-500'   },
               ].map(({ label, count, color }) => (
                 <div key={label} className="bg-surface-secondary rounded-xl p-2 text-center">
@@ -143,7 +157,7 @@ export default function Dashboard() {
             </div>
           )}
 
-          {i?.riskClients?.length > 0 && (
+          {i?.riskClients?.length > 0 && canViewField('dashboard', 'riskClients') && (
             <div>
               <p className="text-xs font-semibold text-red-600 mb-2 flex items-center gap-1">
                 <AlertTriangle size={11} /> At-Risk — Call Today
@@ -165,7 +179,7 @@ export default function Dashboard() {
             </div>
           )}
 
-          {(!i?.riskClients?.length) && (
+          {canViewField('dashboard', 'riskClients') && !i?.riskClients?.length && (
             <div className="py-6 text-center">
               <p className="text-3xl mb-1">🎉</p>
               <p className="text-xs text-gray-400">No at-risk clients!</p>
@@ -175,7 +189,7 @@ export default function Dashboard() {
       </div>
 
       {/* Dept performance (only if insights returned) */}
-      {i?.departments?.length > 0 && (
+      {i?.departments?.length > 0 && canViewField('dashboard', 'deptPerformance') && (
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-gray-900">Department Performance</h3>

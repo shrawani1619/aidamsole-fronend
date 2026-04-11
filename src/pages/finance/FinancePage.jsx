@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, DollarSign, TrendingUp, AlertCircle, CheckCircle } from 'lucide-react';
+import { Plus, IndianRupee, TrendingUp, AlertCircle, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { financeApi, clientsApi, projectsApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -227,7 +227,7 @@ export default function FinancePage() {
             icon={TrendingUp} trend={summaryData.mrrGrowth} />
           <StatCard label="Outstanding" value={formatINR(summaryData.outstanding)} color="text-amber-600"
             icon={AlertCircle} sub={`${summaryData.outstandingCount} invoices pending`} />
-          <StatCard label="Active Clients" value={summaryData.activeClients} icon={DollarSign}
+          <StatCard label="Active Clients" value={summaryData.activeClients} icon={IndianRupee}
             sub={`${formatINR(summaryData.revenuePerClient)}/client avg`} />
           <StatCard label="Yearly Revenue" value={formatINR(summaryData.yearlyRevenue)} />
         </div>
@@ -263,7 +263,7 @@ export default function FinancePage() {
           <tbody>
             {invoices.length === 0 ? (
               <tr><td colSpan={8}>
-                <EmptyState icon={DollarSign} title="No invoices" description="Create your first invoice to get started" />
+                <EmptyState icon={IndianRupee} title="No invoices" description="Create your first invoice to get started" />
               </td></tr>
             ) : invoices.map(inv => (
               <tr key={inv._id}>
