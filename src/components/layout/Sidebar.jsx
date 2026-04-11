@@ -42,11 +42,11 @@ export default function Sidebar() {
     <div className="flex flex-col h-full">
 
       {/* Logo */}
-      <div className={`flex items-center gap-3 px-4 py-5 border-b border-white/10 ${collapsed ? 'justify-center' : ''}`}>
+      <div className={`flex items-center gap-3 px-4 py-6 border-b border-white/10 ${collapsed ? 'justify-center' : ''}`}>
         <img
           src={LOGO_SRC}
           alt="AiDamsole"
-          className={`object-contain flex-shrink-0 ${collapsed ? 'w-8 h-8' : 'h-8 w-auto max-w-[150px]'}`}
+          className={`object-contain flex-shrink-0 ${collapsed ? 'w-12 h-12' : 'h-14 w-auto max-w-[min(100%,260px)]'}`}
         />
       </div>
 
@@ -129,7 +129,7 @@ export default function Sidebar() {
         <SidebarContent />
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="absolute -right-3 top-20 w-6 h-6 bg-white border border-gray-200 rounded-full shadow-card flex items-center justify-center text-gray-500 hover:text-brand-navy transition-colors"
+          className="absolute -right-3 top-24 w-6 h-6 bg-white border border-gray-200 rounded-full shadow-card flex items-center justify-center text-gray-500 hover:text-brand-navy transition-colors"
         >
           {collapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
         </button>
