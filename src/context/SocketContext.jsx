@@ -12,7 +12,10 @@ export const SocketProvider = ({ children }) => {
 
   useEffect(() => {
     if (!user) return;
-    socketRef.current = io(window.location.origin.replace(':3000', ':5000'), {
+    const socketUrl =
+      (import.meta.env.VITE_SOCKET_URL && String(import.meta.env.VITE_SOCKET_URL).trim()) ||
+      window.location.origin.replace(':3000', ':5000');
+    socketRef.current = io(socketUrl, {
       transports: ['websocket', 'polling'],
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
