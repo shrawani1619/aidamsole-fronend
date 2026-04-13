@@ -191,7 +191,7 @@ export const chatApi = {
   createConversation: (data)     => api.post('/chat/conversations', data),
   messages:           (id, params) => api.get(`/chat/conversations/${id}/messages`, { params }),
   sendMessage:        (id, data) => api.post(`/chat/conversations/${id}/messages`, data),
-  deleteMessage:      (id)       => api.delete(`/chat/messages/${id}`),
+  deleteMessage:      (id, mode = 'me') => api.delete(`/chat/messages/${id}`, { data: { mode } }),
 };
 
 // ── Notifications ─────────────────────────────────────────────────────────────

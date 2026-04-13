@@ -2,11 +2,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Plus, FolderKanban, Calendar, Users, ChevronDown, Eye } from 'lucide-react';
+import { Plus, FolderKanban, Calendar, Users, ChevronDown, Eye, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { projectsApi, clientsApi, departmentsApi, usersApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { Modal, Input, Select, Textarea, SearchInput, PageLoader, EmptyState, ProgressBar, StatCard } from '../../components/ui';
+import { Modal, Input, Select, Textarea, SearchInput, PageLoader, EmptyState, ProgressBar, StatCard, ConfirmDialog } from '../../components/ui';
 import { formatDate, statusColors, priorityColors, slugToLabel, formatINR, isOverdue } from '../../utils/helpers';
 
 const STATUS_OPTS = [
@@ -286,6 +286,7 @@ export default function ProjectsPage() {
   const [priority, setPriority] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editProject, setEditProject] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['projects', { search, status, priority }],
@@ -300,6 +301,15 @@ export default function ProjectsPage() {
     onSuccess: () => {
       toast.success('Project status updated');
       qc.invalidateQueries(['projects']);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => projectsApi.delete(deleteTarget._id),
+    onSuccess: (res) => {
+      toast.success(res?.data?.message || 'Project deleted');
+      qc.invalidateQueries(['projects']);
+      setDeleteTarget(null);
     },
   });
 
@@ -367,9 +377,22 @@ export default function ProjectsPage() {
                     </Link>
                     <p className="text-xs text-gray-500 mt-0.5">{p.clientId?.company} · <span className="text-brand-navy">{formatProjectServices(p.service, p.serviceOtherDetail)}</span></p>
                   </div>
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0 ml-2"
-                    style={{ backgroundColor: p.departmentId?.color || '#0D1B8E' }}>
-                    {p.departmentId?.name?.slice(0, 2) || '??'}
+                  <div className="flex items-start gap-1.5 flex-shrink-0 ml-2">
+                    {canModule('projects', 'delete') && (
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget(p)}
+                        className="w-8 h-8 rounded-lg border border-red-100 text-red-600 hover:bg-red-50 inline-flex items-center justify-center"
+                        title="Delete project"
+                        aria-label="Delete project"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold text-white"
+                      style={{ backgroundColor: p.departmentId?.color || '#0D1B8E' }}>
+                      {p.departmentId?.name?.slice(0, 2) || '??'}
+                    </div>
                   </div>
                 </div>
 
@@ -450,6 +473,17 @@ export default function ProjectsPage() {
         title={editProject ? `Edit — ${editProject.title}` : 'New Project'} size="lg">
         <ProjectForm onClose={() => { setModalOpen(false); setEditProject(null); }} existing={editProject} />
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteMutation.mutate()}
+        loading={deleteMutation.isPending}
+        title="Delete project"
+        confirmLabel="Delete project"
+        danger
+        message={`Delete "${deleteTarget?.title}" permanently? This cannot be undone. If it has active tasks, delete or move those tasks first.`}
+      />
     </div>
   );
 }

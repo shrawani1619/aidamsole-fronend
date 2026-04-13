@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Send, Plus, MessageSquare, Search, Users, Upload, FileText, Loader2, X } from 'lucide-react';
+import { Send, Plus, MessageSquare, Search, Users, Upload, FileText, Loader2, X, MoreVertical, Check, CheckCheck } from 'lucide-react';
 import { chatApi, uploadApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
@@ -70,6 +70,7 @@ export default function ChatPage() {
   const [message, setMessage] = useState('');
   const [newConvoOpen, setNewConvoOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [openMessageMenu, setOpenMessageMenu] = useState(null);
   /** Staged attachment — upload + send only when user clicks Send */
   const [pendingFile, setPendingFile] = useState(null);
   const messagesEndRef = useRef(null);
@@ -115,6 +116,17 @@ export default function ChatPage() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async ({ messageId, mode }) => {
+      await chatApi.deleteMessage(messageId, mode);
+    },
+    onSuccess: () => {
+      setOpenMessageMenu(null);
+      refetchMessages();
+      qc.invalidateQueries(['conversations']);
+    },
+  });
+
   const canSend = !!(message.trim() || pendingFile);
 
   const handleSend = () => {
@@ -149,6 +161,15 @@ export default function ChatPage() {
   }, [on, activeConvo]);
 
   useEffect(() => {
+    if (!on || !activeConvo) return;
+    const unsub = on('chat:message:update', (evt) => {
+      if (evt.conversationId === activeConvo._id) refetchMessages();
+      qc.invalidateQueries(['conversations']);
+    });
+    return unsub;
+  }, [on, activeConvo, refetchMessages, qc]);
+
+  useEffect(() => {
     if (activeConvo && joinRoom) joinRoom(activeConvo._id);
   }, [activeConvo]);
 
@@ -161,6 +182,16 @@ export default function ChatPage() {
     c.participants?.some(p => p.name?.toLowerCase().includes(search.toLowerCase()))
   );
   const messages = messagesData?.messages || [];
+
+  const getMessageStatus = (msg) => {
+    const others = (activeConvo?.participants || []).filter((p) => p._id !== user?._id);
+    const readBy = (msg.readBy || []).map((id) => String(id));
+    const everyoneSeen = others.length > 0 && others.every((p) => readBy.includes(String(p._id)));
+    const delivered = others.some((p) => readBy.includes(String(p._id)));
+    if (everyoneSeen) return 'seen';
+    if (delivered) return 'delivered';
+    return 'sent';
+  };
 
   const getConvoName = (convo) => {
     if (convo.name) return convo.name;
@@ -271,16 +302,50 @@ export default function ChatPage() {
             <div className="flex-1 overflow-y-auto p-5 space-y-3">
               {messages.map(msg => {
                 const isMine = msg.senderId?._id === user?._id || msg.senderId === user?._id;
+                const status = isMine ? getMessageStatus(msg) : null;
+                const isDeletedForEveryone = msg.isDeleted || msg.type === 'system';
                 return (
                   <div key={msg._id} className={`flex items-end gap-2.5 ${isMine ? 'flex-row-reverse' : ''}`}>
                     {!isMine && <Avatar user={msg.senderId} size="xs" />}
-                    <div className={`max-w-[70%] px-4 py-2.5 rounded-2xl text-sm ${
+                    <div className={`group relative max-w-[70%] px-4 py-2.5 rounded-2xl text-sm ${
                       isMine ? 'bg-brand-navy text-white rounded-br-sm' : 'bg-white text-gray-800 shadow-card rounded-bl-sm'
                     }`}>
+                      {isMine && !isDeletedForEveryone && (
+                        <button
+                          type="button"
+                          onClick={() => setOpenMessageMenu((cur) => (cur === msg._id ? null : msg._id))}
+                          className={`absolute top-1 right-1 p-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity ${
+                            isMine ? 'hover:bg-white/20' : 'hover:bg-gray-100'
+                          }`}
+                          aria-label="Message options"
+                        >
+                          <MoreVertical size={14} />
+                        </button>
+                      )}
+                      {isMine && openMessageMenu === msg._id && (
+                        <div className="absolute top-7 right-1 z-20 w-40 rounded-lg border border-gray-100 bg-white text-gray-700 shadow-lg py-1">
+                          <button
+                            type="button"
+                            onClick={() => deleteMutation.mutate({ messageId: msg._id, mode: 'me' })}
+                            className="w-full px-3 py-2 text-left text-xs hover:bg-gray-50"
+                            disabled={deleteMutation.isPending}
+                          >
+                            Delete for me
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteMutation.mutate({ messageId: msg._id, mode: 'everyone' })}
+                            className="w-full px-3 py-2 text-left text-xs hover:bg-gray-50"
+                            disabled={deleteMutation.isPending}
+                          >
+                            Delete for everyone
+                          </button>
+                        </div>
+                      )}
                       {!isMine && activeConvo.type === 'group' && (
                         <p className="text-xs font-semibold text-brand-navy mb-1">{msg.senderId?.name}</p>
                       )}
-                      {msg.type === 'image' && msg.fileUrl && (
+                      {msg.type === 'image' && msg.fileUrl && !isDeletedForEveryone && (
                         <a href={msg.fileUrl} target="_blank" rel="noopener noreferrer" className="block">
                           <img
                             src={msg.fileUrl}
@@ -289,7 +354,7 @@ export default function ChatPage() {
                           />
                         </a>
                       )}
-                      {msg.type === 'file' && msg.fileUrl && (
+                      {msg.type === 'file' && msg.fileUrl && !isDeletedForEveryone && (
                         <>
                           <a
                             href={msg.fileUrl}
@@ -307,11 +372,23 @@ export default function ChatPage() {
                           )}
                         </>
                       )}
-                      {msg.type === 'image' && msg.text && (
+                      {msg.type === 'image' && msg.text && !isDeletedForEveryone && (
                         <p className={`mt-1.5 text-sm ${isMine ? 'text-white/95' : 'text-gray-800'}`}>{msg.text}</p>
                       )}
-                      {msg.type === 'text' && msg.text && <p>{msg.text}</p>}
-                      <p className={`text-xs mt-1 ${isMine ? 'text-white/60' : 'text-gray-400'}`}>{timeAgo(msg.createdAt)}</p>
+                      {(msg.type === 'text' || isDeletedForEveryone) && msg.text && (
+                        <p className={isDeletedForEveryone ? 'italic opacity-80' : ''}>{msg.text}</p>
+                      )}
+                      <div className={`text-xs mt-1 flex items-center gap-1 justify-end ${isMine ? 'text-white/60' : 'text-gray-400'}`}>
+                        <span>{timeAgo(msg.createdAt)}</span>
+                        {isMine && (
+                          <span
+                            className={status === 'seen' ? 'text-sky-300' : 'text-white/70'}
+                            title={status === 'seen' ? 'Seen' : status === 'delivered' ? 'Delivered' : 'Sent'}
+                          >
+                            {status === 'sent' ? <Check size={13} /> : <CheckCheck size={13} />}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );

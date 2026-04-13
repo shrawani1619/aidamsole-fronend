@@ -1,18 +1,35 @@
-import React from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Calendar, Users, Building2, Briefcase } from 'lucide-react';
+import React, { useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, Calendar, Users, Building2, Briefcase, Trash2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { projectsApi } from '../../services/api';
-import { PageLoader, EmptyState, ProgressBar } from '../../components/ui';
+import { useAuth } from '../../context/AuthContext';
+import { PageLoader, EmptyState, ProgressBar, ConfirmDialog } from '../../components/ui';
 import { formatDate, formatINR, isOverdue, slugToLabel } from '../../utils/helpers';
 
 export default function ProjectDetailPage() {
   const { projectId } = useParams();
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const { canModule } = useAuth();
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => projectsApi.get(projectId).then((r) => r.data),
     enabled: !!projectId,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => projectsApi.delete(projectId),
+    onSuccess: (res) => {
+      toast.success(res?.data?.message || 'Project deleted');
+      qc.invalidateQueries(['projects']);
+      qc.removeQueries({ queryKey: ['project', projectId] });
+      setDeleteOpen(false);
+      navigate('/projects');
+    },
   });
 
   if (isLoading) return <PageLoader />;
@@ -46,7 +63,19 @@ export default function ProjectDetailPage() {
             <h1 className="text-xl font-bold text-gray-900">{project.title}</h1>
             <p className="text-sm text-gray-500 mt-1">{project.description || 'No description added.'}</p>
           </div>
-          <span className="text-xs badge-blue">{slugToLabel(project.status || 'planning')}</span>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {canModule('projects', 'delete') && (
+              <button
+                type="button"
+                onClick={() => setDeleteOpen(true)}
+                className="btn-secondary py-1.5 px-2.5 text-xs text-red-600 hover:bg-red-50 inline-flex items-center gap-1"
+              >
+                <Trash2 size={14} />
+                Delete
+              </button>
+            )}
+            <span className="text-xs badge-blue">{slugToLabel(project.status || 'planning')}</span>
+          </div>
         </div>
 
         <ProgressBar value={project.progress || 0} showLabel />
@@ -96,6 +125,17 @@ export default function ProjectDetailPage() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={() => deleteMutation.mutate()}
+        loading={deleteMutation.isPending}
+        title="Delete project"
+        confirmLabel="Delete project"
+        danger
+        message={`Delete "${project.title}" permanently? This cannot be undone. If it has active tasks, delete or move those tasks first.`}
+      />
     </div>
   );
 }

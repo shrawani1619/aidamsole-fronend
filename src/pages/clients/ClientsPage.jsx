@@ -135,7 +135,7 @@ export default function ClientsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: () => clientsApi.delete(deleteTarget._id),
-    onSuccess: () => { toast.success('Client churned'); qc.invalidateQueries(['clients']); setDeleteTarget(null); }
+    onSuccess: () => { toast.success('Client deleted'); qc.invalidateQueries(['clients']); setDeleteTarget(null); }
   });
 
   const clients = data?.clients || [];
@@ -286,8 +286,8 @@ export default function ClientsPage() {
 
       <ConfirmDialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
         onConfirm={() => deleteMutation.mutate()} loading={deleteMutation.isPending}
-        title="Churn Client" confirmLabel="Mark Churned" danger
-        message={`Mark "${deleteTarget?.company}" as churned? This cannot be undone easily.`} />
+        title="Delete Client" confirmLabel="Delete Permanently" danger
+        message={`Delete "${deleteTarget?.company}" permanently? This cannot be undone. If this client has any projects or finance invoices, deletion will be blocked until those are removed or reassigned.`} />
     </div>
   );
 }

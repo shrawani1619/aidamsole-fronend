@@ -10,6 +10,7 @@ import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
 import ResetPasswordPage from './pages/auth/ResetPasswordPage';
 import DashboardPage from './pages/dashboard/DashboardPage';
 import ClientsPage from './pages/clients/ClientsPage';
+import ClientDetailPage from './pages/clients/ClientDetailPage';
 import ProjectsPage from './pages/projects/ProjectsPage';
 import ProjectDetailPage from './pages/projects/ProjectDetailPage';
 import TasksPage from './pages/tasks/TasksPage';
@@ -79,6 +80,7 @@ export default function App() {
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard"   element={<ModuleGate module="dashboard"><DashboardPage /></ModuleGate>} />
             <Route path="clients"     element={<ModuleGate module="clients"><ClientsPage /></ModuleGate>} />
+            <Route path="clients/:clientId" element={<ModuleGate module="clients"><ClientDetailPage /></ModuleGate>} />
             <Route path="projects"    element={<ModuleGate module="projects"><ProjectsPage /></ModuleGate>} />
             <Route path="projects/:projectId" element={<ModuleGate module="projects"><ProjectDetailPage /></ModuleGate>} />
             <Route path="tasks/:taskId" element={<ModuleGate module="tasks"><TaskDetailPage /></ModuleGate>} />
