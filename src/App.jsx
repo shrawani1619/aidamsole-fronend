@@ -11,6 +11,7 @@ import ResetPasswordPage from './pages/auth/ResetPasswordPage';
 import DashboardPage from './pages/dashboard/DashboardPage';
 import ClientsPage from './pages/clients/ClientsPage';
 import ProjectsPage from './pages/projects/ProjectsPage';
+import ProjectDetailPage from './pages/projects/ProjectDetailPage';
 import TasksPage from './pages/tasks/TasksPage';
 import TaskDetailPage from './pages/tasks/TaskDetailPage';
 import DepartmentsPage from './pages/departments/DepartmentsPage';
@@ -79,6 +80,7 @@ export default function App() {
             <Route path="dashboard"   element={<ModuleGate module="dashboard"><DashboardPage /></ModuleGate>} />
             <Route path="clients"     element={<ModuleGate module="clients"><ClientsPage /></ModuleGate>} />
             <Route path="projects"    element={<ModuleGate module="projects"><ProjectsPage /></ModuleGate>} />
+            <Route path="projects/:projectId" element={<ModuleGate module="projects"><ProjectDetailPage /></ModuleGate>} />
             <Route path="tasks/:taskId" element={<ModuleGate module="tasks"><TaskDetailPage /></ModuleGate>} />
             <Route path="tasks"       element={<ModuleGate module="tasks"><TasksPage /></ModuleGate>} />
             <Route path="departments" element={<ModuleGate module="departments"><DepartmentsPage /></ModuleGate>} />

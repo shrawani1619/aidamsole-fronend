@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Plus, FolderKanban, Calendar, Users, ChevronDown } from 'lucide-react';
+import { Plus, FolderKanban, Calendar, Users, ChevronDown, Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { projectsApi, clientsApi, departmentsApi, usersApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -34,6 +34,11 @@ function formatProjectServices(s, serviceOtherDetail) {
     return x;
   });
   return parts.join(', ');
+}
+
+function projectStatusLabel(status) {
+  if (status === 'on_hold') return 'Inactive';
+  return slugToLabel(status);
 }
 
 function ProjectForm({ onClose, existing }) {
@@ -274,7 +279,7 @@ function ProjectForm({ onClose, existing }) {
 }
 
 export default function ProjectsPage() {
-  const { canManage } = useAuth();
+  const { canManage, canModule } = useAuth();
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
@@ -288,6 +293,15 @@ export default function ProjectsPage() {
   });
 
   const projects = data?.projects || [];
+  const canToggleProject = canModule('projects', 'edit');
+
+  const statusToggleMutation = useMutation({
+    mutationFn: ({ id, status: nextStatus }) => projectsApi.update(id, { status: nextStatus }),
+    onSuccess: () => {
+      toast.success('Project status updated');
+      qc.invalidateQueries(['projects']);
+    },
+  });
 
   const statusClass = { planning: 'badge-purple', active: 'badge-green', on_hold: 'badge-amber', completed: 'badge-blue', cancelled: 'badge-gray' };
   const priorityClass = { critical: 'badge-red', high: 'badge-amber', medium: 'badge-blue', low: 'badge-gray' };
@@ -340,9 +354,13 @@ export default function ProjectsPage() {
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className={`text-xs ${statusClass[p.status] || 'badge-gray'}`}>{slugToLabel(p.status)}</span>
-                      <span className={`text-xs ${priorityClass[p.priority] || 'badge-gray'}`}>{p.priority}</span>
-                      {overdue && <span className="badge-red text-xs">Overdue</span>}
+                      <span className={`text-xs ${statusClass[p.status] || 'badge-gray'}`}>{projectStatusLabel(p.status)}</span>
+                      {p.status !== 'on_hold' && (
+                        <>
+                          <span className={`text-xs ${priorityClass[p.priority] || 'badge-gray'}`}>{p.priority}</span>
+                          {overdue && <span className="badge-red text-xs">Overdue</span>}
+                        </>
+                      )}
                     </div>
                     <Link to={`/projects/${p._id}`}>
                       <h3 className="text-sm font-semibold text-gray-900 group-hover:text-brand-navy truncate">{p.title}</h3>
@@ -373,9 +391,10 @@ export default function ProjectsPage() {
                   )}
                 </div>
 
-                {/* Team avatars */}
-                {p.team?.length > 0 && (
-                  <div className="flex items-center gap-1 mt-3 pt-3 border-t border-gray-100">
+                {/* Team avatars + actions */}
+                <div className="flex items-center gap-1 mt-3 pt-3 border-t border-gray-100">
+                  {p.team?.length > 0 ? (
+                    <>
                     {p.team.slice(0, 4).map(m => (
                       <div key={m._id} className="w-6 h-6 rounded-full bg-brand-navy/20 flex items-center justify-center text-brand-navy text-xs font-bold"
                         title={m.name}>
@@ -383,12 +402,44 @@ export default function ProjectsPage() {
                       </div>
                     ))}
                     {p.team.length > 4 && <span className="text-xs text-gray-400 ml-1">+{p.team.length - 4}</span>}
+                    </>
+                  ) : (
+                    <span className="text-xs text-gray-400">No members</span>
+                  )}
+
+                  <div className="ml-auto flex items-center gap-1">
+                    <Link
+                      to={`/projects/${p._id}`}
+                      className="btn-secondary py-1 px-2 text-xs inline-flex items-center gap-1"
+                    >
+                      <Eye size={12} /> View
+                    </Link>
                     {canManage && (
-                      <button onClick={() => { setEditProject(p); setModalOpen(true); }}
-                        className="ml-auto text-xs text-brand-navy hover:underline">Edit</button>
+                      <button
+                        type="button"
+                        onClick={() => { setEditProject(p); setModalOpen(true); }}
+                        className="btn-secondary py-1 px-2 text-xs"
+                      >
+                        Edit
+                      </button>
+                    )}
+                    {canToggleProject && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          statusToggleMutation.mutate({
+                            id: p._id,
+                            status: p.status === 'active' ? 'on_hold' : 'active',
+                          })
+                        }
+                        disabled={statusToggleMutation.isPending}
+                        className="btn-secondary py-1 px-2 text-xs inline-flex items-center gap-1"
+                      >
+                        {p.status === 'active' ? 'Inactive' : 'Active'}
+                      </button>
                     )}
                   </div>
-                )}
+                </div>
               </div>
             );
           })}
