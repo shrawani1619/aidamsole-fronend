@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Bell, Wifi, WifiOff } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { notificationsApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
@@ -9,6 +10,7 @@ import { timeAgo } from '../../utils/helpers';
 
 export default function Header({ title }) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { connected } = useSocket();
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef(null);
@@ -95,7 +97,14 @@ export default function Header({ title }) {
         </div>
 
         {/* User avatar */}
-        <Avatar user={user} size="sm" />
+        <button
+          type="button"
+          onClick={() => navigate('/profile')}
+          className="rounded-full focus:outline-none focus:ring-2 focus:ring-brand-navy/30"
+          title="Go to profile"
+        >
+          <Avatar user={user} size="sm" />
+        </button>
       </div>
     </header>
   );

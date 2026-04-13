@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Plus, CheckSquare, Clock, Eye, ThumbsUp, MessageSquare, Archive } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { tasksApi, projectsApi, clientsApi, departmentsApi, usersApi } from '../../services/api';
+import { tasksApi, clientsApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Modal, Input, Select, Textarea, SearchInput, PageLoader, EmptyState, Avatar, ConfirmDialog, CheckboxMultiSelect } from '../../components/ui';
 import { formatDate, statusColors, priorityColors, slugToLabel, isOverdue, timeAgo } from '../../utils/helpers';
@@ -160,12 +160,15 @@ function SubtaskEditor({ st, index, onChange, onRemove, projects, departments, u
 export function TaskForm({ onClose, existing, defaultProjectId }) {
   const qc = useQueryClient();
   const { user } = useAuth();
-  const { data: pData } = useQuery({ queryKey: ['projects-all'], queryFn: () => projectsApi.list({ limit: 100 }).then(r => r.data) });
-  const { data: uData } = useQuery({ queryKey: ['users'], queryFn: () => usersApi.list().then(r => r.data) });
-  const { data: dData } = useQuery({ queryKey: ['departments'], queryFn: () => departmentsApi.list().then(r => r.data) });
-  const projects = pData?.projects || [];
-  const users = uData?.users || [];
-  const departments = dData?.departments || [];
+  const { data: metaData } = useQuery({
+    queryKey: ['tasks-meta', 'task-form-v2'],
+    queryFn: () => tasksApi.meta().then(r => r.data),
+    staleTime: 0,
+    refetchOnMount: 'always',
+  });
+  const projects = metaData?.projects || [];
+  const users = metaData?.users || [];
+  const departments = metaData?.departments || [];
 
   const selectedProject = projects.find(p => p._id === (existing?.projectId?._id || defaultProjectId));
 

@@ -366,7 +366,9 @@ export default function TeamPage() {
   });
   const { data: dData } = useQuery({ queryKey: ['departments'], queryFn: () => departmentsApi.list().then(r => r.data) });
   const departments = dData?.departments || [];
-  const users = (uData?.users || []).filter(u => !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()));
+  const users = (uData?.users || [])
+    .filter((u) => !['admin', 'super_admin'].includes(u.role))
+    .filter((u) => !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()));
 
   const trashMutation = useMutation({
     mutationFn: () => usersApi.trash(trashTarget._id),
@@ -444,7 +446,7 @@ export default function TeamPage() {
                       <p className="text-sm font-semibold text-gray-900">{u.name}</p>
                       <p className="text-xs text-gray-500 truncate">{u.email}</p>
                     </div>
-                    <span className={`text-xs flex-shrink-0 ${ROLE_BADGE[u.role] || 'badge-gray'}`}>
+                    <span className={`text-[11px] leading-4 px-2 py-0.5 flex-shrink-0 ${ROLE_BADGE[u.role] || 'badge-gray'}`}>
                       {slugToLabel(u.role)}
                     </span>
                   </div>
@@ -452,12 +454,12 @@ export default function TeamPage() {
                     {departmentRowsForDisplay(u).map(({ dept, role }, i) => (
                       <React.Fragment key={dept?._id || i}>
                         <span
-                          className="text-xs px-2 py-0.5 rounded-full text-white font-medium"
+                          className="text-[11px] leading-4 px-2 py-0.5 rounded-full text-white font-medium"
                           style={{ backgroundColor: dept?.color || '#0D1B8E' }}
                         >
                           {dept?.name || '—'}
                         </span>
-                        {role ? <span className="badge-gray">{role}</span> : null}
+                        {role ? <span className="badge-gray text-[11px] leading-4 px-2 py-0.5">{role}</span> : null}
                       </React.Fragment>
                     ))}
                     {!u.isActive && <span className="badge-red">Inactive</span>}

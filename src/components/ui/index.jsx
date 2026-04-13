@@ -42,8 +42,29 @@ export const Badge = ({ children, variant = 'gray', className = '' }) => {
 export const Modal = ({ open, onClose, title, children, size = 'md', footer }) => {
   if (!open) return null;
   const sizeClass = size === 'xl' ? 'modal-xl' : size === 'lg' ? 'modal-lg' : 'modal';
+  const overlayMouseDownRef = useRef(false);
+
+  const handleOverlayMouseDown = (e) => {
+    overlayMouseDownRef.current = e.target === e.currentTarget;
+  };
+
+  const handleOverlayClick = (e) => {
+    if (e.target !== e.currentTarget) return;
+    if (!overlayMouseDownRef.current) return;
+
+    // Avoid accidental close when user is selecting text and releases outside.
+    const selection = window.getSelection?.();
+    if (selection && !selection.isCollapsed) return;
+
+    onClose();
+  };
+
   return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div
+      className="modal-overlay"
+      onMouseDown={handleOverlayMouseDown}
+      onClick={handleOverlayClick}
+    >
       <div className={sizeClass}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <h2 className="text-base font-semibold text-gray-900">{title}</h2>

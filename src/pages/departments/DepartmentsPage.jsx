@@ -132,7 +132,7 @@ function DeptForm({ onClose, existing }) {
           <div className="space-y-2 mt-3 pt-3 border-t border-gray-100">
             <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Added roles</p>
             {form.roles.map((role, i) => (
-              <div key={`${i}-${role}`} className="flex gap-2 items-end">
+              <div key={i} className="flex gap-2 items-end">
                 <Input
                   label=""
                   className="flex-1"

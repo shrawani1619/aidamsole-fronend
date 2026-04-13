@@ -142,6 +142,7 @@ export const projectsApi = {
 // ── Tasks ─────────────────────────────────────────────────────────────────────
 export const tasksApi = {
   list:          (params)               => api.get('/tasks', { params }),
+  meta:          ()                     => api.get('/tasks/meta'),
   create:        (data)                 => api.post('/tasks', data),
   get:           (id)                   => api.get(`/tasks/${id}`),
   update:        (id, data)             => api.put(`/tasks/${id}`, data),

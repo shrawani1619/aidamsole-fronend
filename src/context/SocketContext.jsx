@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { io } from 'socket.io-client';
 import { useAuth } from './AuthContext';
+import { connectSocket, disconnectSocket } from '../services/socket';
 
 const SocketContext = createContext(null);
 
@@ -12,19 +12,19 @@ export const SocketProvider = ({ children }) => {
 
   useEffect(() => {
     if (!user) return;
-    const socketUrl =
-      (import.meta.env.VITE_SOCKET_URL && String(import.meta.env.VITE_SOCKET_URL).trim()) ||
-      window.location.origin.replace(':3000', ':5000');
-    socketRef.current = io(socketUrl, {
-      transports: ['websocket', 'polling'],
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-    });
+    socketRef.current = connectSocket();
     const socket = socketRef.current;
     socket.on('connect', () => { setConnected(true); socket.emit('user:join', user._id); });
     socket.on('disconnect', () => setConnected(false));
     socket.on('users:online', (users) => setOnlineUsers(users));
-    return () => { socket.disconnect(); socketRef.current = null; setConnected(false); };
+    return () => {
+      socket.off('connect');
+      socket.off('disconnect');
+      socket.off('users:online');
+      disconnectSocket();
+      socketRef.current = null;
+      setConnected(false);
+    };
   }, [user]);
 
   const emit = (event, data) => socketRef.current?.emit(event, data);

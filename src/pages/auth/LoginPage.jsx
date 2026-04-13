@@ -123,14 +123,6 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-8 p-4 bg-white rounded-xl border border-gray-100 shadow-card">
-            <p className="text-xs font-semibold text-gray-500 mb-2">Demo credentials</p>
-            <div className="space-y-1 text-xs text-gray-600">
-              <div className="flex justify-between"><span>Super Admin</span><span className="font-mono text-gray-500">admin@aidamsole.com</span></div>
-              <div className="flex justify-between"><span>SEO Manager</span><span className="font-mono text-gray-500">seo.manager@...</span></div>
-              <div className="flex justify-between"><span>Password</span><span className="font-mono text-brand-navy font-medium">admin123</span></div>
-            </div>
-          </div>
         </div>
       </div>
     </div>

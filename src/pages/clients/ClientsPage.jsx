@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Plus, Filter, Search, Users, AlertTriangle, TrendingUp, RefreshCw } from 'lucide-react';
+import { Plus, Filter, Search, Users, AlertTriangle, TrendingUp, RefreshCw, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { clientsApi, departmentsApi, usersApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -249,6 +249,16 @@ export default function ClientsPage() {
                       {canManage && (
                         <button onClick={() => { setEditClient(client); setModalOpen(true); }}
                           className="btn-secondary py-1 px-2 text-xs">Edit</button>
+                      )}
+                      {canModule('clients', 'delete') && (
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(client)}
+                          className="btn-secondary py-1 px-2 text-xs text-red-600 hover:bg-red-50 inline-flex items-center gap-1"
+                        >
+                          <Trash2 size={12} />
+                          Delete
+                        </button>
                       )}
                     </div>
                   </td>
