@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Users, FolderKanban, CheckSquare, Building2,
-  BarChart3, IndianRupee, MessageSquare, LogOut,
-  ChevronLeft, ChevronRight, UserCircle, User, Menu, X, Shield, Trash2, History, UserCog
+  BarChart3, IndianRupee, MessageSquare,
+  ChevronLeft, ChevronRight, UserCircle, Menu, X, Shield, Trash2, History, UserCog
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { Avatar } from '../ui';
 
 const LOGO_SRC = `${import.meta.env.BASE_URL}logo.png`;
 
@@ -28,12 +27,9 @@ const navItems = [
 ];
 
 export default function Sidebar() {
-  const { user, logout, isAdmin, isManager, isSuperAdmin, canModule } = useAuth();
-  const navigate = useNavigate();
+  const { isAdmin, isManager, isSuperAdmin, canModule } = useAuth();
   const [collapsed, setCollapsed]   = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  const handleLogout = () => { logout(); navigate('/login'); };
 
   // Nav visibility: module view ACL + legacy admin/manager flags
   const visibleItems = navItems.filter((item) => {
@@ -71,42 +67,6 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      {/* Footer */}
-      <div className="px-3 py-4 border-t border-white/10 space-y-1">
-        <NavLink
-          to="/profile"
-          onClick={() => setMobileOpen(false)}
-          className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
-        >
-          <User size={18} />
-          {!collapsed && <span>Profile</span>}
-        </NavLink>
-
-        {/* User pill */}
-        <NavLink
-          to="/profile"
-          onClick={() => setMobileOpen(false)}
-          className={`flex items-center gap-3 px-3 py-2 rounded-lg mt-1 hover:bg-white/5 transition-colors ${collapsed ? 'justify-center' : ''}`}
-        >
-          <Avatar user={user} size="sm" />
-          {!collapsed && (
-            <div className="flex-1 min-w-0">
-              <p className="text-white text-xs font-medium truncate">{user?.name}</p>
-              <span className="mt-1 inline-flex max-w-full items-center rounded-md bg-blue-500 px-2 py-0.5 text-[10px] font-semibold capitalize text-white shadow-sm truncate">
-                {user?.role?.replace(/_/g, ' ') || '—'}
-              </span>
-            </div>
-          )}
-        </NavLink>
-
-        <button
-          onClick={handleLogout}
-          className="sidebar-link w-full text-red-400 hover:text-red-300 hover:bg-red-500/10"
-        >
-          <LogOut size={18} />
-          {!collapsed && <span>Logout</span>}
-        </button>
-      </div>
     </div>
   );
 

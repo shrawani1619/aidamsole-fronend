@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell, Wifi, WifiOff } from 'lucide-react';
+import { Bell, Wifi, WifiOff, User, LogOut } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { notificationsApi } from '../../services/api';
@@ -9,11 +9,13 @@ import { Avatar } from '../ui';
 import { timeAgo } from '../../utils/helpers';
 
 export default function Header({ title }) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { connected } = useSocket();
   const [notifOpen, setNotifOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const notifRef = useRef(null);
+  const accountRef = useRef(null);
   const qc = useQueryClient();
 
   const { data, refetch } = useQuery({
@@ -28,10 +30,19 @@ export default function Header({ title }) {
   });
 
   useEffect(() => {
-    const handler = (e) => { if (notifRef.current && !notifRef.current.contains(e.target)) setNotifOpen(false); };
+    const handler = (e) => {
+      if (notifRef.current && !notifRef.current.contains(e.target)) setNotifOpen(false);
+      if (accountRef.current && !accountRef.current.contains(e.target)) setAccountOpen(false);
+    };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  const handleLogout = () => {
+    logout();
+    setAccountOpen(false);
+    navigate('/login');
+  };
 
   const unread = data?.unreadCount || 0;
   const notifications = data?.notifications || [];
@@ -97,14 +108,37 @@ export default function Header({ title }) {
         </div>
 
         {/* User avatar */}
-        <button
-          type="button"
-          onClick={() => navigate('/profile')}
-          className="rounded-full focus:outline-none focus:ring-2 focus:ring-brand-navy/30"
-          title="Go to profile"
-        >
-          <Avatar user={user} size="sm" />
-        </button>
+        <div className="relative" ref={accountRef}>
+          <button
+            type="button"
+            onClick={() => setAccountOpen((p) => !p)}
+            className="rounded-full focus:outline-none focus:ring-2 focus:ring-brand-navy/30"
+            title="Account menu"
+          >
+            <Avatar user={user} size="sm" />
+          </button>
+
+          {accountOpen && (
+            <div className="absolute right-0 top-full mt-2 w-44 bg-white rounded-xl shadow-modal border border-gray-100 z-50 p-1.5">
+              <button
+                type="button"
+                onClick={() => { navigate('/profile'); setAccountOpen(false); }}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-surface-secondary transition-colors"
+              >
+                <User size={15} />
+                Profile
+              </button>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50 transition-colors"
+              >
+                <LogOut size={15} />
+                Logout
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );
