@@ -21,6 +21,7 @@ const SERVICES_OPTS = ['SEO', 'Paid Ads', 'Social Media', 'Web Dev', 'Email Mark
 
 function ClientForm({ onClose, existing }) {
   const qc = useQueryClient();
+  const { isAdmin } = useAuth();
   const { data: deptsData } = useQuery({ queryKey: ['departments'], queryFn: () => departmentsApi.list().then(r => r.data) });
   const { data: usersData } = useQuery({ queryKey: ['users'], queryFn: () => usersApi.list().then(r => r.data) });
   const departments = deptsData?.departments || [];
@@ -42,6 +43,7 @@ function ClientForm({ onClose, existing }) {
   const mutation = useMutation({
     mutationFn: (data) => {
       const payload = { ...data, phone: phoneToApi(data.phone) };
+      if (!isAdmin) delete payload.contractValue;
       return existing ? clientsApi.update(existing._id, payload) : clientsApi.create(payload);
     },
     onSuccess: () => { toast.success(existing ? 'Client updated' : 'Client created'); qc.invalidateQueries(['clients']); onClose(); }
@@ -62,16 +64,18 @@ function ClientForm({ onClose, existing }) {
         <Input label="Website" value={form.website} onChange={e => set('website', e.target.value)} placeholder="https://..." />
         <Input label="Industry" value={form.industry} onChange={e => set('industry', e.target.value)} placeholder="Technology" />
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className={`grid gap-4 ${isAdmin ? 'grid-cols-2' : 'grid-cols-1'}`}>
         <Select label="Status" value={form.status} onChange={e => set('status', e.target.value)}
           options={STATUS_OPTS.slice(1)} />
-        <div>
-          <Input label="Monthly Contract Value (₹)" type="number" value={form.contractValue}
-            onChange={e => set('contractValue', e.target.value)} placeholder="45000" />
-          <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
-            Account-level monthly retainer. Used for MRR and finance reports—not the same as a single project’s delivery budget.
-          </p>
-        </div>
+        {isAdmin && (
+          <div>
+            <Input label="Monthly Contract Value (₹)" type="number" value={form.contractValue}
+              onChange={e => set('contractValue', e.target.value)} placeholder="45000" />
+            <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+              Account-level monthly retainer. Used for MRR and finance reports—not the same as a single project’s delivery budget.
+            </p>
+          </div>
+        )}
       </div>
       <div className="grid grid-cols-2 gap-4">
         <Input label="Contract Start" type="date" value={form.contractStart} onChange={e => set('contractStart', e.target.value)} />
@@ -118,7 +122,7 @@ function ClientForm({ onClose, existing }) {
 }
 
 export default function ClientsPage() {
-  const { canManage, canModule } = useAuth();
+  const { canManage, canModule, isAdmin } = useAuth();
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
@@ -185,7 +189,7 @@ export default function ClientsPage() {
               <th>Services</th>
               <th>AM</th>
               <th>Health</th>
-              <th>Value</th>
+              {isAdmin && <th>Value</th>}
               <th>Renewal</th>
               <th>Status</th>
               <th></th>
@@ -193,7 +197,7 @@ export default function ClientsPage() {
           </thead>
           <tbody>
             {clients.length === 0 ? (
-              <tr><td colSpan={8}><EmptyState icon={Users} title="No clients found" description="Adjust filters or add your first client" /></td></tr>
+              <tr><td colSpan={isAdmin ? 8 : 7}><EmptyState icon={Users} title="No clients found" description="Adjust filters or add your first client" /></td></tr>
             ) : clients.map(client => {
               const days = daysUntil(client.renewalDate);
               return (
@@ -230,7 +234,9 @@ export default function ClientsPage() {
                       {client.healthScore?.overall || 0}/10
                     </span>
                   </td>
-                  <td className="text-sm font-medium text-gray-900">{formatINR(client.contractValue)}</td>
+                  {isAdmin && (
+                    <td className="text-sm font-medium text-gray-900">{formatINR(client.contractValue)}</td>
+                  )}
                   <td>
                     {client.renewalDate ? (
                       <span className={`text-xs ${days !== null && days <= 14 ? 'text-red-600 font-medium' : 'text-gray-500'}`}>

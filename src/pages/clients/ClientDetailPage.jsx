@@ -14,6 +14,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { clientsApi, projectsApi } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import { PageLoader, EmptyState, Avatar, StatCard } from '../../components/ui';
 import {
   formatINR,
@@ -39,6 +40,7 @@ function Field({ label, children, icon: Icon }) {
 
 export default function ClientDetailPage() {
   const { clientId } = useParams();
+  const { isAdmin } = useAuth();
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['client', clientId],
@@ -159,9 +161,11 @@ export default function ClientDetailPage() {
                 '—'
               )}
             </Field>
-            <Field label="Monthly contract (₹)" icon={Wallet}>
-              {formatINR(client.contractValue)}
-            </Field>
+            {isAdmin && (
+              <Field label="Monthly contract (₹)" icon={Wallet}>
+                {formatINR(client.contractValue)}
+              </Field>
+            )}
             <Field label="Contract start" icon={Calendar}>
               {client.contractStart ? formatDate(client.contractStart, 'dd MMM yyyy') : '—'}
             </Field>
