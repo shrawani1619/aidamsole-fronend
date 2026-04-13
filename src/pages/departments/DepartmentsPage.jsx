@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Building2, Users, UserPlus, UserMinus } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -9,6 +9,30 @@ import { Modal, Input, Select, PageLoader, EmptyState, Avatar, StatCard, Confirm
 /** Preset brand colors when the typed name matches a common department */
 const DEPT_COLORS = { SEO: '#10B981', 'Paid Ads': '#3B82F6', 'Social Media': '#8B5CF6', 'Web Dev': '#F59E0B', Sales: '#EF4444', Accounts: '#6B7280' };
 
+/** Max members shown on each department card; rest via "View all". */
+const MEMBERS_CARD_PREVIEW = 2;
+
+function memberRoleInDept(m, deptId) {
+  const id = String(deptId);
+  const row = (m.departmentMemberships || []).find(
+    (x) => String(x.departmentId?._id || x.departmentId) === id
+  );
+  if (row?.role) return row.role;
+  if (String(m.departmentId?._id || m.departmentId) === id) return m.departmentRole;
+  return m.departmentRole || '';
+}
+
+/** Populated users or legacy single headId */
+function departmentHeadsList(dept) {
+  if (dept.headIds?.length) return dept.headIds.filter(Boolean);
+  if (dept.headId) return [dept.headId];
+  return [];
+}
+
+function departmentHeadIdSet(dept) {
+  return new Set(departmentHeadsList(dept).map((h) => String(h._id || h)));
+}
+
 function DeptForm({ onClose, existing }) {
   const qc = useQueryClient();
   const { data: uData } = useQuery({ queryKey: ['users'], queryFn: () => usersApi.list().then(r => r.data) });
@@ -17,7 +41,11 @@ function DeptForm({ onClose, existing }) {
   const [form, setForm] = useState({
     name:        existing?.name        || '',
     description: existing?.description || '',
-    headId:      existing?.headId?._id || '',
+    headIds:     existing?.headIds?.length
+      ? existing.headIds.map((h) => h._id || h)
+      : existing?.headId
+        ? [existing.headId._id || existing.headId]
+        : [],
     color:       existing?.color       || '#0D1B8E',
     roles:       Array.isArray(existing?.roles) && existing.roles.length ? [...existing.roles] : []
   });
@@ -49,10 +77,28 @@ function DeptForm({ onClose, existing }) {
     roles: p.roles.filter((_, i) => i !== index)
   }));
 
+  const toggleHead = (userId) => {
+    const id = String(userId);
+    setForm((p) => {
+      const cur = p.headIds || [];
+      const has = cur.map(String).includes(id);
+      return {
+        ...p,
+        headIds: has ? cur.filter((x) => String(x) !== id) : [...cur, userId],
+      };
+    });
+  };
+
   const mutation = useMutation({
     mutationFn: (data) => {
       const roles = (data.roles || []).map((r) => String(r).trim()).filter(Boolean);
-      const payload = { ...data, name: String(data.name || '').trim(), roles };
+      const { headIds, ...rest } = data;
+      const payload = {
+        ...rest,
+        name: String(data.name || '').trim(),
+        roles,
+        headIds: Array.isArray(headIds) ? headIds : [],
+      };
       return existing ? departmentsApi.update(existing._id, payload) : departmentsApi.create(payload);
     },
     onSuccess:  ()   => { toast.success(existing ? 'Updated' : 'Department created'); qc.invalidateQueries(['departments']); onClose(); }
@@ -103,8 +149,28 @@ function DeptForm({ onClose, existing }) {
         )}
       </div>
       <Input label="Description" value={form.description} onChange={e => set('description', e.target.value)} placeholder="Short overview..." />
-      <Select label="Department Head" value={form.headId} onChange={e => set('headId', e.target.value)}
-        options={[{ value: '', label: 'Select head...' }, ...users.map(u => ({ value: u._id, label: `${u.name} — ${u.email}` }))]} />
+      <div>
+        <p className="label">Department heads</p>
+        <p className="text-xs text-gray-500 mb-2">Select one or more people as head of this department.</p>
+        <div className="max-h-48 overflow-y-auto space-y-2 border border-gray-100 rounded-xl p-3 bg-surface-secondary/50">
+          {users.length === 0 ? (
+            <p className="text-sm text-gray-500">No users in team list yet.</p>
+          ) : (
+            users.map((u) => (
+              <label key={u._id} className="flex items-center gap-2 cursor-pointer text-sm">
+                <input
+                  type="checkbox"
+                  className="rounded border-gray-300 text-brand-navy focus:ring-brand-navy"
+                  checked={(form.headIds || []).map(String).includes(String(u._id))}
+                  onChange={() => toggleHead(u._id)}
+                />
+                <span className="text-gray-800">{u.name}</span>
+                <span className="text-gray-400 text-xs truncate">{u.email}</span>
+              </label>
+            ))
+          )}
+        </div>
+      </div>
       <div>
         <label className="label">Brand Color</label>
         <div className="flex items-center gap-3 mt-1">
@@ -132,6 +198,19 @@ function AddMemberModal({ dept, onClose }) {
   const [userId,   setUserId]   = useState('');
   const [deptRole, setDeptRole] = useState('');
 
+  const deptRoles = useMemo(() => {
+    const raw = dept?.roles;
+    return Array.isArray(raw) ? raw.map(String).map((s) => s.trim()).filter(Boolean) : [];
+  }, [dept?.roles]);
+
+  const roleSelectOptions = useMemo(() => {
+    const opts = deptRoles.map((r) => ({ value: r, label: r }));
+    if (deptRole && !deptRoles.includes(deptRole)) {
+      opts.unshift({ value: deptRole, label: `${deptRole} (custom)` });
+    }
+    return [{ value: '', label: 'Select role…' }, ...opts];
+  }, [deptRoles, deptRole]);
+
   const mutation = useMutation({
     mutationFn: () => departmentsApi.addMember(dept._id, { userId, departmentRole: deptRole }),
     onSuccess:  () => { toast.success('Member added'); qc.invalidateQueries(['departments']); onClose(); }
@@ -141,11 +220,28 @@ function AddMemberModal({ dept, onClose }) {
     <div className="space-y-4">
       <Select label="Select User" value={userId} onChange={e => setUserId(e.target.value)}
         options={[{ value: '', label: 'Select user...' }, ...users.map(u => ({ value: u._id, label: `${u.name} (${u.email})` }))]} />
-      <Input label="Role in Department" value={deptRole} onChange={e => setDeptRole(e.target.value)}
-        placeholder="e.g. SEO Executive, Content Writer" />
+      {deptRoles.length > 0 ? (
+        <Select
+          label="Role in Department"
+          value={deptRole}
+          onChange={(e) => setDeptRole(e.target.value)}
+          options={roleSelectOptions}
+        />
+      ) : (
+        <Input
+          label="Role in Department"
+          value={deptRole}
+          onChange={(e) => setDeptRole(e.target.value)}
+          placeholder="e.g. SEO Executive, Content Writer"
+        />
+      )}
       <div className="flex justify-end gap-2">
         <button className="btn-secondary" onClick={onClose}>Cancel</button>
-        <button className="btn-primary" onClick={() => mutation.mutate()} disabled={!userId || mutation.isPending}>
+        <button
+          className="btn-primary"
+          onClick={() => mutation.mutate()}
+          disabled={!userId || mutation.isPending || (deptRoles.length > 0 && !deptRole)}
+        >
           {mutation.isPending ? 'Adding...' : 'Add Member'}
         </button>
       </div>
@@ -161,6 +257,7 @@ export default function DepartmentsPage() {
   const [editDept,      setEditDept]      = useState(null);
   const [addMemberDept, setAddMemberDept] = useState(null);
   const [removeMember,  setRemoveMember]  = useState(null);
+  const [viewAllDeptId, setViewAllDeptId] = useState(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['departments'],
@@ -173,6 +270,7 @@ export default function DepartmentsPage() {
   });
 
   const departments = data?.departments || [];
+  const viewAllDept = departments.find((d) => String(d._id) === String(viewAllDeptId)) || null;
 
   if (isLoading) return <PageLoader />;
 
@@ -229,13 +327,20 @@ export default function DepartmentsPage() {
                 )}
               </div>
 
-              {/* Head */}
-              {dept.headId && (
-                <div className="flex items-center gap-2 mb-3 p-2.5 bg-surface-secondary rounded-xl">
-                  <Avatar user={dept.headId} size="sm" />
-                  <div>
-                    <p className="text-xs font-semibold text-gray-800">{dept.headId.name}</p>
-                    <p className="text-xs text-gray-400">Department Head</p>
+              {/* Heads */}
+              {departmentHeadsList(dept).length > 0 && (
+                <div className="mb-3 p-2.5 bg-surface-secondary rounded-xl space-y-2">
+                  <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Department heads</p>
+                  <div className="flex flex-col gap-2">
+                    {departmentHeadsList(dept).map((h) => (
+                      <div key={h._id} className="flex items-center gap-2">
+                        <Avatar user={h} size="sm" />
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-gray-800 truncate">{h.name}</p>
+                          <p className="text-xs text-gray-400">Head</p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -251,20 +356,22 @@ export default function DepartmentsPage() {
                     </button>
                   )}
                 </div>
-                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                <div className="space-y-1.5 pr-1">
                   {dept.members?.length === 0 && (
                     <p className="text-xs text-gray-400 text-center py-3">No members yet</p>
                   )}
-                  {dept.members?.map(m => (
+                  {(dept.members || []).slice(0, MEMBERS_CARD_PREVIEW).map((m) => (
                     <div key={m._id} className="flex items-center justify-between group py-0.5">
                       <div className="flex items-center gap-2">
                         <Avatar user={m} size="xs" />
                         <div>
                           <p className="text-xs font-medium text-gray-800">{m.name}</p>
-                          <p className="text-xs text-gray-400">{m.departmentRole || m.role?.replace(/_/g, ' ')}</p>
+                          <p className="text-xs text-gray-400">
+                            {memberRoleInDept(m, dept._id) || m.role?.replace(/_/g, ' ')}
+                          </p>
                         </div>
                       </div>
-                      {canManage && String(m._id) !== String(dept.headId?._id) && (
+                      {canManage && !departmentHeadIdSet(dept).has(String(m._id)) && (
                         <button
                           onClick={() => setRemoveMember({ deptId: dept._id, userId: m._id, name: m.name })}
                           className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all rounded">
@@ -273,6 +380,15 @@ export default function DepartmentsPage() {
                       )}
                     </div>
                   ))}
+                  {(dept.members?.length || 0) > MEMBERS_CARD_PREVIEW && (
+                    <button
+                      type="button"
+                      onClick={() => setViewAllDeptId(dept._id)}
+                      className="w-full text-left text-xs font-medium text-brand-navy hover:underline pt-1.5"
+                    >
+                      View all {dept.members.length} members
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -293,7 +409,46 @@ export default function DepartmentsPage() {
 
       <Modal open={!!addMemberDept} onClose={() => setAddMemberDept(null)}
         title={`Add Member to ${addMemberDept?.name}`}>
-        {addMemberDept && <AddMemberModal dept={addMemberDept} onClose={() => setAddMemberDept(null)} />}
+        {addMemberDept && (
+          <AddMemberModal key={addMemberDept._id} dept={addMemberDept} onClose={() => setAddMemberDept(null)} />
+        )}
+      </Modal>
+
+      <Modal
+        open={!!viewAllDept}
+        onClose={() => setViewAllDeptId(null)}
+        title={viewAllDept ? `Members — ${viewAllDept.name}` : 'Members'}
+        size="md"
+      >
+        {viewAllDept && (
+          <div className="space-y-1.5 max-h-[min(60vh,420px)] overflow-y-auto pr-1">
+            {(viewAllDept.members || []).map((m) => (
+              <div key={m._id} className="flex items-center justify-between group py-1 border-b border-gray-50 last:border-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Avatar user={m} size="sm" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-800 truncate">{m.name}</p>
+                    <p className="text-xs text-gray-400">
+                      {memberRoleInDept(m, viewAllDept._id) || m.role?.replace(/_/g, ' ')}
+                    </p>
+                  </div>
+                </div>
+                {canManage && !departmentHeadIdSet(viewAllDept).has(String(m._id)) && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setRemoveMember({ deptId: viewAllDept._id, userId: m._id, name: m.name })
+                    }
+                    className="p-1.5 text-gray-400 hover:text-red-500 rounded shrink-0"
+                    title="Remove from department"
+                  >
+                    <UserMinus size={14} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </Modal>
 
       <ConfirmDialog open={!!removeMember} onClose={() => setRemoveMember(null)}

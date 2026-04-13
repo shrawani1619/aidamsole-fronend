@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, FolderKanban, CheckSquare, Building2,
   BarChart3, IndianRupee, MessageSquare, LogOut,
-  ChevronLeft, ChevronRight, UserCircle, User, Menu, X, Shield
+  ChevronLeft, ChevronRight, UserCircle, User, Menu, X, Shield, Trash2, History, UserCog
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Avatar } from '../ui';
@@ -18,14 +18,17 @@ const navItems = [
   { path: '/tasks',       icon: CheckSquare,     label: 'Tasks',       module: 'tasks' },
   { path: '/departments', icon: Building2,       label: 'Departments', module: 'departments' },
   { path: '/team',        icon: Users,           label: 'Team',        module: 'team' },
+  { path: '/admins',      icon: UserCog,          label: 'Admins',      module: 'admins', superAdminOnly: true },
   { path: '/permissions', icon: Shield,          label: 'Permissions', adminOnly: true },
   { path: '/reports',     icon: BarChart3,       label: 'Reports',     module: 'reports' },
   { path: '/finance',     icon: IndianRupee,      label: 'Finance',     module: 'finance' },
   { path: '/chat',        icon: MessageSquare,   label: 'Chat',        module: 'chat' },
+  { path: '/trash',       icon: Trash2,          label: 'Trash',       module: 'trash' },
+  { path: '/history',     icon: History,         label: 'History',     module: 'history' },
 ];
 
 export default function Sidebar() {
-  const { user, logout, isAdmin, isManager, canModule } = useAuth();
+  const { user, logout, isAdmin, isManager, isSuperAdmin, canModule } = useAuth();
   const navigate = useNavigate();
   const [collapsed, setCollapsed]   = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -34,6 +37,7 @@ export default function Sidebar() {
 
   // Nav visibility: module view ACL + legacy admin/manager flags
   const visibleItems = navItems.filter((item) => {
+    if (item.superAdminOnly) return isSuperAdmin && canModule(item.module, 'view');
     if (item.adminOnly) return isAdmin;
     if (item.managerUp) return isAdmin || isManager;
     if (item.module) return canModule(item.module, 'view');

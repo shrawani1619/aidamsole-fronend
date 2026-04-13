@@ -11,11 +11,15 @@ import DashboardPage from './pages/dashboard/DashboardPage';
 import ClientsPage from './pages/clients/ClientsPage';
 import ProjectsPage from './pages/projects/ProjectsPage';
 import TasksPage from './pages/tasks/TasksPage';
+import TaskDetailPage from './pages/tasks/TaskDetailPage';
 import DepartmentsPage from './pages/departments/DepartmentsPage';
 import ReportsPage from './pages/reports/ReportsPage';
 import FinancePage from './pages/finance/FinancePage';
 import ChatPage from './pages/chat/ChatPage';
 import TeamPage from './pages/team/TeamPage';
+import TrashPage from './pages/trash/TrashPage';
+import HistoryPage from './pages/history/HistoryPage';
+import AdminsPage from './pages/admins/AdminsPage';
 import PermissionsPage from './pages/permissions/PermissionsPage';
 import ProfilePage from './pages/profile/ProfilePage';
 import ModuleGate from './components/ModuleGate';
@@ -72,9 +76,13 @@ export default function App() {
             <Route path="dashboard"   element={<ModuleGate module="dashboard"><DashboardPage /></ModuleGate>} />
             <Route path="clients"     element={<ModuleGate module="clients"><ClientsPage /></ModuleGate>} />
             <Route path="projects"    element={<ModuleGate module="projects"><ProjectsPage /></ModuleGate>} />
+            <Route path="tasks/:taskId" element={<ModuleGate module="tasks"><TaskDetailPage /></ModuleGate>} />
             <Route path="tasks"       element={<ModuleGate module="tasks"><TasksPage /></ModuleGate>} />
             <Route path="departments" element={<ModuleGate module="departments"><DepartmentsPage /></ModuleGate>} />
             <Route path="team"        element={<ModuleGate module="team"><TeamPage /></ModuleGate>} />
+            <Route path="trash"       element={<ModuleGate module="trash"><TrashPage /></ModuleGate>} />
+            <Route path="history"     element={<ModuleGate module="history"><HistoryPage /></ModuleGate>} />
+            <Route path="admins"      element={<ModuleGate module="admins"><AdminsPage /></ModuleGate>} />
             <Route path="permissions" element={<PermissionsPage />} />
             <Route path="reports"     element={<ModuleGate module="reports"><ReportsPage /></ModuleGate>} />
             <Route path="finance"     element={<ModuleGate module="finance"><FinancePage /></ModuleGate>} />

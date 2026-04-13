@@ -10,6 +10,9 @@ export const MODULE_IDS = [
   'reports',
   'finance',
   'chat',
+  'trash',
+  'history',
+  'admins',
 ];
 
 export const MODULE_LABELS = {
@@ -22,6 +25,9 @@ export const MODULE_LABELS = {
   reports: 'Reports',
   finance: 'Finance',
   chat: 'Chat',
+  trash: 'Trash',
+  history: 'Activity history',
+  admins: 'Administrators',
 };
 
 export const ACTION_LABELS = {

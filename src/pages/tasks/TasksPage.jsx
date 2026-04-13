@@ -1,12 +1,21 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Plus, CheckSquare, Clock, Eye, ThumbsUp, MessageSquare, Filter } from 'lucide-react';
+import { Plus, CheckSquare, Clock, Eye, ThumbsUp, MessageSquare, Archive } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { tasksApi, projectsApi, clientsApi, departmentsApi, usersApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { Modal, Input, Select, Textarea, SearchInput, PageLoader, EmptyState, Avatar, Tabs } from '../../components/ui';
+import { Modal, Input, Select, Textarea, SearchInput, PageLoader, EmptyState, Avatar, ConfirmDialog, CheckboxMultiSelect } from '../../components/ui';
 import { formatDate, statusColors, priorityColors, slugToLabel, isOverdue, timeAgo } from '../../utils/helpers';
+
+export function isTaskReviewer(task, userId) {
+  if (!task || !userId) return false;
+  const uid = String(userId);
+  const fromList = (task.reviewerIds || []).map((r) => String(r._id || r));
+  if (fromList.includes(uid)) return true;
+  if (task.reviewerId && String(task.reviewerId._id || task.reviewerId) === uid) return true;
+  return false;
+}
 
 const STATUSES = ['todo', 'in_progress', 'review', 'approved', 'done', 'blocked'];
 const PRIORITIES = ['low', 'medium', 'high', 'critical'];
@@ -19,6 +28,15 @@ const STATUS_DOT = {
   todo: 'bg-gray-400', in_progress: 'bg-blue-500', review: 'bg-amber-500',
   approved: 'bg-green-500', done: 'bg-green-600', blocked: 'bg-red-500'
 };
+const STATUS_FILTERS = [
+  { key: '', label: 'All' },
+  { key: 'todo', label: 'To Do' },
+  { key: 'in_progress', label: 'In Progress' },
+  { key: 'review', label: 'Review' },
+  { key: 'approved', label: 'Approved' },
+  { key: 'done', label: 'Done' },
+  { key: 'blocked', label: 'Blocked' }
+];
 
 function mapExistingSubtask(s) {
   const due = s.dueDate
@@ -83,7 +101,7 @@ function buildTaskPayload(data) {
     clientId: data.clientId,
     departmentId: data.departmentId,
     assigneeId: data.assigneeId || undefined,
-    reviewerId: data.reviewerId || undefined,
+    reviewerIds: (data.reviewerIds || []).filter(Boolean),
     status: data.status,
     priority: data.priority,
     dueDate: data.dueDate || undefined,
@@ -139,7 +157,7 @@ function SubtaskEditor({ st, index, onChange, onRemove, projects, departments, u
   );
 }
 
-function TaskForm({ onClose, existing, defaultProjectId }) {
+export function TaskForm({ onClose, existing, defaultProjectId }) {
   const qc = useQueryClient();
   const { user } = useAuth();
   const { data: pData } = useQuery({ queryKey: ['projects-all'], queryFn: () => projectsApi.list({ limit: 100 }).then(r => r.data) });
@@ -151,12 +169,18 @@ function TaskForm({ onClose, existing, defaultProjectId }) {
 
   const selectedProject = projects.find(p => p._id === (existing?.projectId?._id || defaultProjectId));
 
+  const initialReviewerIds = existing?.reviewerIds?.length
+    ? existing.reviewerIds.map((r) => r._id || r)
+    : existing?.reviewerId?._id
+      ? [existing.reviewerId._id]
+      : [];
+
   const [form, setForm] = useState({
     title: existing?.title || '', description: existing?.description || '',
     projectId: existing?.projectId?._id || defaultProjectId || '',
     clientId: existing?.clientId?._id || selectedProject?.clientId?._id || '',
     departmentId: existing?.departmentId?._id || selectedProject?.departmentId?._id || '',
-    assigneeId: existing?.assigneeId?._id || '', reviewerId: existing?.reviewerId?._id || '',
+    assigneeId: existing?.assigneeId?._id || '', reviewerIds: initialReviewerIds,
     status: existing?.status || 'todo', priority: existing?.priority || 'medium',
     dueDate: existing?.dueDate ? existing.dueDate.slice(0, 10) : '',
     estimatedHours: existing?.estimatedHours || '',
@@ -169,6 +193,14 @@ function TaskForm({ onClose, existing, defaultProjectId }) {
     const proj = projects.find(p => p._id === pid);
     set('projectId', pid);
     if (proj) { set('clientId', proj.clientId?._id || ''); set('departmentId', proj.departmentId?._id || ''); }
+  };
+
+  const handleAssigneeChange = (assigneeId) => {
+    setForm((p) => ({
+      ...p,
+      assigneeId,
+      reviewerIds: p.reviewerIds.filter((id) => id !== assigneeId)
+    }));
   };
 
   const addSubtask = () => {
@@ -191,7 +223,12 @@ function TaskForm({ onClose, existing, defaultProjectId }) {
       const payload = buildTaskPayload(data);
       return existing ? tasksApi.update(existing._id, payload) : tasksApi.create(payload);
     },
-    onSuccess: () => { toast.success(existing ? 'Task updated' : 'Task created'); qc.invalidateQueries(['tasks']); onClose(); }
+    onSuccess: () => {
+      toast.success(existing ? 'Task updated' : 'Task created');
+      qc.invalidateQueries(['tasks']);
+      if (existing?._id) qc.invalidateQueries(['task', existing._id]);
+      onClose();
+    }
   });
 
   return (
@@ -205,10 +242,18 @@ function TaskForm({ onClose, existing, defaultProjectId }) {
           options={[{ value: '', label: 'Select dept...' }, ...departments.map(d => ({ value: d._id, label: d.name }))]} />
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <Select label="Assignee" value={form.assigneeId} onChange={e => set('assigneeId', e.target.value)}
+        <Select label="Assignee" value={form.assigneeId} onChange={e => handleAssigneeChange(e.target.value)}
           options={[{ value: '', label: 'Unassigned' }, ...users.map(u => ({ value: u._id, label: u.name }))]} />
-        <Select label="Reviewer (Two-Eye)" value={form.reviewerId} onChange={e => set('reviewerId', e.target.value)}
-          options={[{ value: '', label: 'No reviewer' }, ...users.filter(u => u._id !== form.assigneeId).map(u => ({ value: u._id, label: u.name }))]} />
+        <CheckboxMultiSelect
+          label="Reviewers (Two-Eye)"
+          placeholder="Select reviewers…"
+          emptyMessage="No users available"
+          value={form.reviewerIds}
+          onChange={(next) => set('reviewerIds', next)}
+          options={users
+            .filter((u) => !form.assigneeId || u._id !== form.assigneeId)
+            .map((u) => ({ value: u._id, label: u.name }))}
+        />
       </div>
       <div className="grid grid-cols-3 gap-4">
         <Select label="Status" value={form.status} onChange={e => set('status', e.target.value)}
@@ -253,10 +298,13 @@ function TaskForm({ onClose, existing, defaultProjectId }) {
   );
 }
 
-function TaskCard({ task, onEdit, onApprove }) {
+function TaskCard({ task, onEdit, onApprove, onTrash, canTrash }) {
   const { user } = useAuth();
   const overdue = isOverdue(task.dueDate) && !['done', 'approved'].includes(task.status);
-  const canApprove = task.status === 'review' && task.reviewerId?._id === user._id && task.assigneeId?._id !== user._id;
+  const canApprove =
+    task.status === 'review' &&
+    isTaskReviewer(task, user._id) &&
+    task.assigneeId?._id !== user._id;
 
   return (
     <div className={`border rounded-xl p-3 bg-white hover:shadow-card transition-all ${overdue ? 'border-red-200' : 'border-gray-100'}`}>
@@ -293,7 +341,17 @@ function TaskCard({ task, onEdit, onApprove }) {
               <ThumbsUp size={11} />
             </button>
           )}
-          <button onClick={() => onEdit(task)} className="p-1 text-gray-400 hover:text-brand-navy rounded"><Eye size={11} /></button>
+          <button type="button" onClick={() => onEdit(task)} className="p-1 text-gray-400 hover:text-brand-navy rounded"><Eye size={11} /></button>
+          {canTrash && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onTrash(task); }}
+              className="p-1 text-amber-600 hover:bg-amber-50 rounded"
+              title="Move to trash"
+            >
+              <Archive size={11} />
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -301,15 +359,16 @@ function TaskCard({ task, onEdit, onApprove }) {
 }
 
 export default function TasksPage() {
-  const { canManage } = useAuth();
+  const { canModule } = useAuth();
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterPriority, setFilterPriority] = useState('');
   const [delayed, setDelayed] = useState(false);
-  const [view, setView] = useState('board');
   const [modalOpen, setModalOpen] = useState(false);
   const [editTask, setEditTask] = useState(null);
+  const [taskTrashTarget, setTaskTrashTarget] = useState(null);
+  const canTrashTask = canModule('tasks', 'delete');
 
   const { data, isLoading } = useQuery({
     queryKey: ['tasks', { search, filterStatus, filterPriority, delayed }],
@@ -321,15 +380,17 @@ export default function TasksPage() {
     onSuccess: () => { toast.success('Task approved ✓'); qc.invalidateQueries(['tasks']); }
   });
 
+  const taskTrashMutation = useMutation({
+    mutationFn: (id) => tasksApi.delete(id),
+    onSuccess: () => {
+      toast.success('Task moved to trash');
+      qc.invalidateQueries(['tasks']);
+      qc.invalidateQueries(['trash']);
+      setTaskTrashTarget(null);
+    },
+  });
+
   const tasks = data?.tasks || [];
-  const tasksByStatus = STATUSES.reduce((acc, s) => { acc[s] = tasks.filter(t => t.status === s); return acc; }, {});
-
-  const BOARD_COLS = [
-    { key: 'todo', label: 'To Do' }, { key: 'in_progress', label: 'In Progress' },
-    { key: 'review', label: 'Review' }, { key: 'approved', label: 'Approved' },
-    { key: 'done', label: 'Done' }, { key: 'blocked', label: 'Blocked' }
-  ];
-
   if (isLoading) return <PageLoader />;
 
   return (
@@ -340,8 +401,6 @@ export default function TasksPage() {
           <p className="text-sm text-gray-500">{tasks.length} tasks · {tasks.filter(t => t.isDelayed).length} delayed</p>
         </div>
         <div className="flex items-center gap-2">
-          <Tabs active={view} onChange={setView}
-            tabs={[{ value: 'board', label: 'Board' }, { value: 'list', label: 'List' }]} />
           <button className="btn-primary" onClick={() => { setEditTask(null); setModalOpen(true); }}>
             <Plus size={16} /> New Task
           </button>
@@ -365,30 +424,25 @@ export default function TasksPage() {
         </label>
       </div>
 
+      <div className="flex flex-wrap gap-2">
+        {STATUS_FILTERS.map((s) => (
+          <button
+            key={s.key || 'all'}
+            type="button"
+            onClick={() => setFilterStatus(s.key)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+              filterStatus === s.key
+                ? 'bg-brand-navy text-white border-brand-navy'
+                : 'bg-white text-gray-600 border-gray-200 hover:border-brand-navy/40'
+            }`}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
       {tasks.length === 0 ? (
         <EmptyState icon={CheckSquare} title="No tasks found" description="Create a task or adjust filters" />
-      ) : view === 'board' ? (
-        /* KANBAN BOARD */
-        <div className="flex gap-4 overflow-x-auto pb-4">
-          {BOARD_COLS.map(col => (
-            <div key={col.key} className="flex-shrink-0 w-72">
-              <div className="flex items-center gap-2 mb-3">
-                <div className={`w-2 h-2 rounded-full ${STATUS_DOT[col.key]}`} />
-                <span className="text-xs font-semibold text-gray-700">{col.label}</span>
-                <span className="text-xs text-gray-400 ml-auto bg-gray-100 rounded-full px-2 py-0.5">{tasksByStatus[col.key]?.length || 0}</span>
-              </div>
-              <div className={`space-y-2 min-h-24 p-2 rounded-xl border-2 border-dashed ${
-                tasksByStatus[col.key]?.length ? 'border-transparent' : 'border-gray-200'
-              }`}>
-                {tasksByStatus[col.key]?.map(task => (
-                  <TaskCard key={task._id} task={task}
-                    onEdit={(t) => { setEditTask(t); setModalOpen(true); }}
-                    onApprove={(id) => approveMutation.mutate(id)} />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
       ) : (
         /* LIST VIEW */
         <div className="table-container">
@@ -421,9 +475,19 @@ export default function TasksPage() {
                   </td>
                   <td><span className={`text-xs ${statusColors[task.status] || 'badge-gray'}`}>{slugToLabel(task.status)}</span></td>
                   <td>
-                    <div className="flex gap-1">
+                    <div className="flex flex-wrap gap-1">
                       <Link to={`/tasks/${task._id}`} className="btn-secondary py-1 px-2 text-xs">View</Link>
-                      <button onClick={() => { setEditTask(task); setModalOpen(true); }} className="btn-secondary py-1 px-2 text-xs">Edit</button>
+                      <button type="button" onClick={() => { setEditTask(task); setModalOpen(true); }} className="btn-secondary py-1 px-2 text-xs">Edit</button>
+                      {canTrashTask && (
+                        <button
+                          type="button"
+                          onClick={() => setTaskTrashTarget(task)}
+                          className="btn-secondary py-1 px-2 text-xs text-amber-700 hover:bg-amber-50 inline-flex items-center gap-1"
+                          title="Move to trash"
+                        >
+                          <Archive size={12} /> Trash
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -437,6 +501,17 @@ export default function TasksPage() {
         title={editTask ? `Edit Task` : 'New Task'} size="lg">
         <TaskForm onClose={() => { setModalOpen(false); setEditTask(null); }} existing={editTask} />
       </Modal>
+
+      <ConfirmDialog
+        open={!!taskTrashTarget}
+        onClose={() => setTaskTrashTarget(null)}
+        onConfirm={() => taskTrashMutation.mutate(taskTrashTarget._id)}
+        loading={taskTrashMutation.isPending}
+        title="Move task to trash"
+        confirmLabel="Move to trash"
+        danger
+        message={`Move "${taskTrashTarget?.title}" to trash? It will disappear from boards and lists; restore it from Trash if needed.`}
+      />
     </div>
   );
 }

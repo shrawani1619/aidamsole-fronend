@@ -74,8 +74,29 @@ export const usersApi = {
   get:           (id)     => api.get(`/users/${id}`),
   update:        (id, data) => api.put(`/users/${id}`, data),
   delete:        (id)     => api.delete(`/users/${id}`),
+  trash:         (id)     => api.post(`/users/${id}/trash`),
   resetPassword: (id, data) => api.put(`/users/${id}/reset-password`, data),
   updatePermissions: (id, data) => api.put(`/users/${id}/permissions`, data),
+};
+
+// ── Activity history (super_admin always; others via Permissions → History) ──
+export const historyApi = {
+  list: (params) => api.get('/history', { params }),
+};
+
+// ── Administrators (super_admin only — API enforces) ─────────────────────────
+export const adminsApi = {
+  list: () => api.get('/admins'),
+  create: (data) => api.post('/admins', data),
+};
+
+// ── Trash (admin / super_admin) ───────────────────────────────────────────────
+export const trashApi = {
+  list: () => api.get('/trash'),
+  restoreUser: (id) => api.post(`/trash/restore/user/${id}`),
+  restoreTask: (id) => api.post(`/trash/restore/task/${id}`),
+  permanentDeleteUser: (id) => api.delete(`/trash/user/${id}`),
+  permanentDeleteTask: (id) => api.delete(`/trash/task/${id}`),
 };
 
 // ── Permissions (admin) — schema / defaults / user detail (alias of users permissions) ──
@@ -125,6 +146,7 @@ export const tasksApi = {
   get:           (id)                   => api.get(`/tasks/${id}`),
   update:        (id, data)             => api.put(`/tasks/${id}`, data),
   delete:        (id)                   => api.delete(`/tasks/${id}`),
+  reassign:      (id, data)             => api.put(`/tasks/${id}/reassign`, data),
   twoEyeApprove: (id)                   => api.put(`/tasks/${id}/two-eye-approve`),
   addComment:    (id, data)             => api.post(`/tasks/${id}/comments`, data),
   logTime:       (id, data)             => api.post(`/tasks/${id}/time-log`, data),

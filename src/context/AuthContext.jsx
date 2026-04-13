@@ -65,13 +65,13 @@ export const AuthProvider = ({ children }) => {
   const canManage    = isAdmin || isManager;
 
   const canModule = useCallback((module, action) => {
-    if (user?.role === 'super_admin' || user?.role === 'admin') return true;
+    if (user?.role === 'super_admin') return true;
     return user?.effectiveModulePermissions?.[module]?.[action] === true;
   }, [user]);
 
   /** Field-level flags on any module (dashboard KPIs, report tabs, etc.). Missing field = allowed when module view is true. */
   const canViewField = useCallback((module, fieldKey) => {
-    if (user?.role === 'super_admin' || user?.role === 'admin') return true;
+    if (user?.role === 'super_admin') return true;
     const m = user?.effectiveModulePermissions?.[module];
     if (!m?.view) return false;
     if (m.fields?.[fieldKey] === false) return false;

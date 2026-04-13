@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Loader2, X, ChevronDown, Search, AlertCircle } from 'lucide-react';
 import { getInitials } from '../../utils/helpers';
 
@@ -79,6 +80,143 @@ export const Select = ({ label, error, options = [], className = '', ...props })
     {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
   </div>
 );
+
+// ── Multi-select dropdown (checkboxes) ───────────────────────────────────────
+export const CheckboxMultiSelect = ({
+  label,
+  options = [],
+  value = [],
+  onChange,
+  placeholder = 'Select…',
+  className = '',
+  emptyMessage = 'No options',
+}) => {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+  const triggerRef = useRef(null);
+  const [menuPos, setMenuPos] = useState(null);
+
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) {
+      setMenuPos(null);
+      return;
+    }
+    const update = () => {
+      const el = triggerRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const maxH = 192; // max-h-48
+      const spaceBelow = window.innerHeight - r.bottom - 8;
+      const spaceAbove = r.top - 8;
+      const openUp = spaceBelow < 120 && spaceAbove > spaceBelow;
+      const maxHeight = Math.min(maxH, openUp ? spaceAbove : spaceBelow);
+      setMenuPos({
+        left: r.left,
+        width: r.width,
+        maxHeight,
+        openUp,
+        anchorTop: r.top,
+        anchorBottom: r.bottom,
+      });
+    };
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    const close = (e) => {
+      const t = e.target;
+      if (rootRef.current?.contains(t)) return;
+      if (typeof t.closest === 'function' && t.closest('[data-checkbox-multiselect-menu]')) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, []);
+
+  const selectedLabels = options.filter((o) => value.includes(o.value)).map((o) => o.label);
+  const summary =
+    selectedLabels.length === 0
+      ? placeholder
+      : selectedLabels.length <= 2
+        ? selectedLabels.join(', ')
+        : `${selectedLabels.length} selected`;
+
+  const toggle = (id) => {
+    const next = value.includes(id) ? value.filter((x) => x !== id) : [...value, id];
+    onChange(next);
+  };
+
+  const menu =
+    open &&
+    menuPos &&
+    createPortal(
+      <div
+        data-checkbox-multiselect-menu
+        role="listbox"
+        className="bg-white border border-gray-200 rounded-lg shadow-lg overflow-y-auto py-1"
+        style={{
+          position: 'fixed',
+          left: menuPos.left,
+          width: menuPos.width,
+          maxHeight: menuPos.maxHeight,
+          zIndex: 10000,
+          ...(menuPos.openUp
+            ? { bottom: window.innerHeight - menuPos.anchorTop + 4 }
+            : { top: menuPos.anchorBottom + 4 }),
+        }}
+      >
+        {options.length === 0 ? (
+          <p className="px-3 py-2 text-sm text-gray-400">{emptyMessage}</p>
+        ) : (
+          options.map((o) => (
+            <label
+              key={o.value}
+              className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                className="rounded border-gray-300 text-brand-navy focus:ring-brand-navy"
+                checked={value.includes(o.value)}
+                onChange={() => toggle(o.value)}
+                onClick={(e) => e.stopPropagation()}
+              />
+              <span>{o.label}</span>
+            </label>
+          ))
+        )}
+      </div>,
+      document.body
+    );
+
+  return (
+    <div className={`relative ${className}`} ref={rootRef}>
+      {label && <label className="label">{label}</label>}
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="input w-full text-left flex items-center justify-between gap-2 min-h-[42px] py-2"
+        aria-expanded={open}
+        aria-haspopup="listbox"
+      >
+        <span className={`truncate flex-1 min-w-0 ${selectedLabels.length ? 'text-gray-900' : 'text-gray-400'}`}>
+          {summary}
+        </span>
+        <ChevronDown
+          size={14}
+          className={`text-gray-400 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+      {menu}
+    </div>
+  );
+};
 
 // ── Textarea ──────────────────────────────────────────────────────────────────
 export const Textarea = ({ label, error, rows = 3, className = '', ...props }) => (

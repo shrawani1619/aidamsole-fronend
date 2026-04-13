@@ -203,21 +203,21 @@ export default function PermissionsPage() {
 
   const handleSave = () => {
     if (!selectedId || !draft) return;
+    if (displayUser?.role === 'super_admin' || permDetail?.role === 'super_admin') return;
     const modulePermissions = buildPayloadFromDraft(draft);
     saveMutation.mutate({ id: selectedId, modulePermissions });
   };
 
   const handleResetRoleDefaults = () => {
+    if (displayUser?.role === 'super_admin' || permDetail?.role === 'super_admin') return;
     if (!window.confirm('Clear custom permissions for this user? They will fall back to role defaults.')) return;
     saveMutation.mutate({ id: selectedId, modulePermissions: {} });
   };
 
   const targetRole = permDetail?.role ?? displayUser?.role;
+  const isSuperAdminTarget = targetRole === 'super_admin';
 
-  const canSave =
-    selectedId &&
-    draft &&
-    !(targetRole === 'super_admin' && me?.role !== 'super_admin');
+  const canSave = selectedId && draft && !isSuperAdminTarget;
 
   const formBody =
     selectedId && permLoading ? (
@@ -234,6 +234,12 @@ export default function PermissionsPage() {
             </span>
           </div>
         </div>
+
+        {isSuperAdminTarget && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <strong>Super admin</strong> always has full access to every module. These permissions are fixed and cannot be edited.
+          </div>
+        )}
 
         <div className="overflow-x-auto border border-gray-100 rounded-xl">
           <table className="w-full text-sm">
@@ -257,7 +263,7 @@ export default function PermissionsPage() {
                         type="checkbox"
                         className="rounded border-gray-300 text-brand-navy focus:ring-brand-navy"
                         checked={!!draft[mid]?.[act]}
-                        disabled={act !== 'view' && !draft[mid]?.view}
+                        disabled={isSuperAdminTarget || (act !== 'view' && !draft[mid]?.view)}
                         onChange={() => toggleAction(mid, act)}
                       />
                     </td>
@@ -280,7 +286,7 @@ export default function PermissionsPage() {
                   type="checkbox"
                   className="rounded border-gray-300 text-brand-navy focus:ring-brand-navy"
                   checked={draft.dashboard?.fields?.[fk] !== false}
-                  disabled={!draft.dashboard?.view}
+                  disabled={isSuperAdminTarget || !draft.dashboard?.view}
                   onChange={() => toggleField(fk)}
                 />
                 <span>{dashboardFieldLabel[fk] || fk}</span>
@@ -301,7 +307,7 @@ export default function PermissionsPage() {
                   type="checkbox"
                   className="rounded border-gray-300 text-brand-navy focus:ring-brand-navy"
                   checked={draft.reports?.fields?.[fk] !== false}
-                  disabled={!draft.reports?.view}
+                  disabled={isSuperAdminTarget || !draft.reports?.view}
                   onChange={() => toggleReportField(fk)}
                 />
                 <span>{reportsFieldLabel[fk] || fk}</span>
@@ -396,7 +402,11 @@ export default function PermissionsPage() {
                         {u.role?.replace(/_/g, ' ') || '—'}
                       </td>
                       <td className="py-3 px-3">
-                        {hasCustomPermissions(u) ? (
+                        {u.role === 'super_admin' ? (
+                          <span className="inline-flex items-center rounded-md bg-gray-100 text-gray-700 px-2 py-0.5 text-xs font-medium">
+                            Full access (fixed)
+                          </span>
+                        ) : hasCustomPermissions(u) ? (
                           <span className="inline-flex items-center rounded-md bg-brand-navy/10 text-brand-navy px-2 py-0.5 text-xs font-medium">
                             Custom overrides
                           </span>
@@ -405,14 +415,18 @@ export default function PermissionsPage() {
                         )}
                       </td>
                       <td className="py-3 px-4 text-right">
-                        <button
-                          type="button"
-                          className="btn-secondary text-xs inline-flex items-center gap-1.5"
-                          onClick={() => openConfigureModal(id)}
-                        >
-                          <Pencil size={14} />
-                          Configure
-                        </button>
+                        {u.role === 'super_admin' ? (
+                          <span className="text-xs text-gray-400">—</span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn-secondary text-xs inline-flex items-center gap-1.5"
+                            onClick={() => openConfigureModal(id)}
+                          >
+                            <Pencil size={14} />
+                            Configure
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -436,7 +450,7 @@ export default function PermissionsPage() {
             <button
               type="button"
               className="btn-secondary inline-flex items-center gap-2"
-              disabled={saveMutation.isPending || !selectedId}
+              disabled={saveMutation.isPending || !selectedId || isSuperAdminTarget}
               onClick={handleResetRoleDefaults}
             >
               <RotateCcw size={16} /> Clear overrides

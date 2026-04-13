@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Plus, Users, Shield, Activity, ExternalLink } from 'lucide-react';
+import { Plus, Users, Shield, Activity, ExternalLink, Archive } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usersApi, departmentsApi, reportsApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -16,6 +16,36 @@ const ROLES = [
   { value: 'super_admin', label: 'Super Admin' }
 ];
 const ROLE_BADGE = { super_admin: 'badge-red', admin: 'badge-purple', department_manager: 'badge-blue', employee: 'badge-gray' };
+
+/** Rows for create/edit: [{ departmentId, role }]. */
+function membershipsFromUser(u) {
+  if (u?.departmentMemberships?.length) {
+    return u.departmentMemberships.map((m) => ({
+      departmentId: m.departmentId?._id || m.departmentId,
+      role: m.role || '',
+    }));
+  }
+  if (u?.departmentId) {
+    return [{ departmentId: u.departmentId._id || u.departmentId, role: u.departmentRole || '' }];
+  }
+  return [];
+}
+
+/** For cards / performance: list of { dept, role } with populated dept when available. */
+function departmentRowsForDisplay(u) {
+  const rows = [];
+  if (u?.departmentMemberships?.length) {
+    u.departmentMemberships.forEach((m) => {
+      const dept = m.departmentId;
+      if (dept && (dept.name || dept._id)) rows.push({ dept, role: m.role || '' });
+    });
+    if (rows.length) return rows;
+  }
+  if (u?.departmentId && (u.departmentId.name || u.departmentId._id)) {
+    rows.push({ dept: u.departmentId, role: u.departmentRole || '' });
+  }
+  return rows;
+}
 
 const PERF_RANGES = [
   { value: 'daily', label: 'Today' },
@@ -91,17 +121,17 @@ function EmployeePerformanceModal({ user: emp, onClose }) {
                       {slugToLabel(profile?.role || emp.role)}
                     </span>
                   )}
-                  {(profile?.departmentId || emp.departmentId) && (
-                    <span
-                      className="text-xs px-2 py-0.5 rounded-full text-white font-medium"
-                      style={{ backgroundColor: (profile?.departmentId || emp.departmentId)?.color || '#0D1B8E' }}
-                    >
-                      {(profile?.departmentId || emp.departmentId)?.name}
-                    </span>
-                  )}
-                  {(profile?.departmentRole || emp.departmentRole) && (
-                    <span className="badge-gray">{profile?.departmentRole || emp.departmentRole}</span>
-                  )}
+                  {departmentRowsForDisplay(profile || emp).map(({ dept, role }, i) => (
+                    <React.Fragment key={dept?._id || i}>
+                      <span
+                        className="text-xs px-2 py-0.5 rounded-full text-white font-medium"
+                        style={{ backgroundColor: dept?.color || '#0D1B8E' }}
+                      >
+                        {dept?.name || '—'}
+                      </span>
+                      {role ? <span className="badge-gray">{role}</span> : null}
+                    </React.Fragment>
+                  ))}
                 </div>
               </div>
             </div>
@@ -200,51 +230,47 @@ function UserForm({ onClose, existing }) {
   const departments = dData?.departments || [];
   const [form, setForm] = useState({
     name: existing?.name || '', email: existing?.email || '', phone: phoneFieldValue(existing?.phone),
-    departmentId: existing?.departmentId?._id || '',
-    departmentRole: existing?.departmentRole || '', password: '', isActive: existing?.isActive ?? true
+    password: '', isActive: existing?.isActive ?? true,
   });
+  const [memberships, setMemberships] = useState(() => membershipsFromUser(existing));
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
-  const selectedDept = useMemo(
-    () => departments.find(d => String(d._id) === String(form.departmentId)),
-    [departments, form.departmentId]
-  );
-  const deptRoles = useMemo(() => {
-    const raw = selectedDept?.roles;
-    return Array.isArray(raw) ? raw.map(String).map(s => s.trim()).filter(Boolean) : [];
-  }, [selectedDept]);
-
-  const roleSelectOptions = useMemo(() => {
-    const opts = deptRoles.map(r => ({ value: r, label: r }));
-    if (form.departmentRole && !deptRoles.includes(form.departmentRole)) {
-      opts.unshift({ value: form.departmentRole, label: `${form.departmentRole} (saved)` });
-    }
-    return [{ value: '', label: 'Select role…' }, ...opts];
-  }, [deptRoles, form.departmentRole]);
-
-  const onDepartmentChange = (departmentId) => {
-    setForm((p) => {
-      const dept = departments.find(d => String(d._id) === String(departmentId));
-      const roleList = Array.isArray(dept?.roles)
-        ? dept.roles.map(String).map(s => s.trim()).filter(Boolean)
-        : [];
-      const next = { ...p, departmentId };
-      if (p.departmentRole && !roleList.includes(p.departmentRole)) next.departmentRole = '';
-      return next;
+  const toggleDepartment = (deptId) => {
+    const id = String(deptId);
+    setMemberships((prev) => {
+      const i = prev.findIndex((m) => String(m.departmentId) === id);
+      if (i >= 0) return prev.filter((_, j) => j !== i);
+      return [...prev, { departmentId: deptId, role: '' }];
     });
+  };
+
+  const setRoleForDepartment = (deptId, role) => {
+    setMemberships((prev) =>
+      prev.map((m) => (String(m.departmentId) === String(deptId) ? { ...m, role } : m))
+    );
+  };
+
+  const roleOptionsForDept = (dept) => {
+    const raw = dept?.roles;
+    const deptRoles = Array.isArray(raw) ? raw.map(String).map((s) => s.trim()).filter(Boolean) : [];
+    return deptRoles;
   };
 
   const mutation = useMutation({
     mutationFn: (data) => {
       const payload = {
-        ...data,
+        name: data.name,
+        email: data.email,
         phone: phoneToApi(data.phone),
         role: existing ? existing.role : 'employee',
+        departmentMemberships: memberships.filter((m) => m.departmentId),
+        isActive: data.isActive,
       };
+      if (data.password) payload.password = data.password;
       if (!payload.password) delete payload.password;
       return existing ? usersApi.update(existing._id, payload) : usersApi.create(payload);
     },
-    onSuccess: () => { toast.success(existing ? 'User updated' : 'User created'); qc.invalidateQueries(['users']); onClose(); }
+    onSuccess: () => { toast.success(existing ? 'User updated' : 'User created'); qc.invalidateQueries(['users']); qc.invalidateQueries(['departments']); onClose(); }
   });
 
   return (
@@ -258,29 +284,54 @@ function UserForm({ onClose, existing }) {
           value={form.phone} onChange={e => set('phone', digitsOnlyMax10(e.target.value))} placeholder="9876543210" />
         <Input label={existing ? 'New Password (optional)' : 'Password *'} type="password" value={form.password} onChange={e => set('password', e.target.value)} placeholder="••••••••" />
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <Select
-          label="Department"
-          value={form.departmentId}
-          onChange={e => onDepartmentChange(e.target.value)}
-          options={[{ value: '', label: 'No department' }, ...departments.map(d => ({ value: d._id, label: d.name }))]}
-        />
-        {deptRoles.length > 0 ? (
-          <Select
-            label="Role in department"
-            value={form.departmentRole}
-            onChange={e => set('departmentRole', e.target.value)}
-            options={roleSelectOptions}
-          />
-        ) : (
-          <Input
-            label="Role in department"
-            value={form.departmentRole}
-            onChange={e => set('departmentRole', e.target.value)}
-            disabled={!form.departmentId}
-            placeholder={!form.departmentId ? 'Select a department first' : 'e.g. SEO Executive'}
-          />
-        )}
+      <div>
+        <p className="text-sm font-medium text-gray-700 mb-2">Departments &amp; roles</p>
+        <p className="text-xs text-gray-500 mb-3">Select one or more departments and set this member&apos;s role in each.</p>
+        <div className="max-h-56 overflow-y-auto space-y-2 border border-gray-100 rounded-xl p-3 bg-surface-secondary/50">
+          {departments.length === 0 ? (
+            <p className="text-sm text-gray-500">No departments yet. Create departments first.</p>
+          ) : (
+            departments.map((d) => {
+              const checked = memberships.some((m) => String(m.departmentId) === String(d._id));
+              const row = memberships.find((m) => String(m.departmentId) === String(d._id));
+              const deptRoles = roleOptionsForDept(d);
+              return (
+                <div key={d._id} className="flex flex-col sm:flex-row sm:items-center gap-2 py-2 border-b border-gray-100 last:border-0">
+                  <label className="flex items-center gap-2 min-w-0 sm:w-[42%] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="rounded border-gray-300 text-brand-navy focus:ring-brand-navy"
+                      checked={checked}
+                      onChange={() => toggleDepartment(d._id)}
+                    />
+                    <span className="text-sm font-medium text-gray-800 truncate">{d.name}</span>
+                  </label>
+                  {checked && (
+                    deptRoles.length > 0 ? (
+                      <Select
+                        label=""
+                        value={row?.role || ''}
+                        onChange={(e) => setRoleForDepartment(d._id, e.target.value)}
+                        options={[
+                          { value: '', label: 'Role in this dept…' },
+                          ...deptRoles.map((r) => ({ value: r, label: r })),
+                          ...(row?.role && !deptRoles.includes(row.role) ? [{ value: row.role, label: `${row.role} (saved)` }] : []),
+                        ]}
+                      />
+                    ) : (
+                      <Input
+                        label=""
+                        value={row?.role || ''}
+                        onChange={(e) => setRoleForDepartment(d._id, e.target.value)}
+                        placeholder="e.g. SEO Executive"
+                      />
+                    )
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
       {existing && (
         <div className="grid grid-cols-2 gap-4 max-w-md">
@@ -299,14 +350,14 @@ function UserForm({ onClose, existing }) {
 }
 
 export default function TeamPage() {
-  const { isAdmin, isSuperAdmin, canModule } = useAuth();
+  const { user: me, isAdmin, isSuperAdmin, canModule } = useAuth();
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editUser, setEditUser] = useState(null);
-  const [deactivateTarget, setDeactivateTarget] = useState(null);
+  const [trashTarget, setTrashTarget] = useState(null);
   const [performanceUser, setPerformanceUser] = useState(null);
 
   const { data: uData, isLoading } = useQuery({
@@ -317,9 +368,14 @@ export default function TeamPage() {
   const departments = dData?.departments || [];
   const users = (uData?.users || []).filter(u => !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()));
 
-  const deactivateMutation = useMutation({
-    mutationFn: () => usersApi.delete(deactivateTarget._id),
-    onSuccess: () => { toast.success('User deactivated'); qc.invalidateQueries(['users']); setDeactivateTarget(null); }
+  const trashMutation = useMutation({
+    mutationFn: () => usersApi.trash(trashTarget._id),
+    onSuccess: () => {
+      toast.success('User moved to trash');
+      qc.invalidateQueries(['users']);
+      qc.invalidateQueries(['trash']);
+      setTrashTarget(null);
+    },
   });
 
   if (isLoading) return <PageLoader />;
@@ -393,13 +449,17 @@ export default function TeamPage() {
                     </span>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-1">
-                    {u.departmentId && (
-                      <span className="text-xs px-2 py-0.5 rounded-full text-white font-medium"
-                        style={{ backgroundColor: u.departmentId.color || '#0D1B8E' }}>
-                        {u.departmentId.name}
-                      </span>
-                    )}
-                    {u.departmentRole && <span className="badge-gray">{u.departmentRole}</span>}
+                    {departmentRowsForDisplay(u).map(({ dept, role }, i) => (
+                      <React.Fragment key={dept?._id || i}>
+                        <span
+                          className="text-xs px-2 py-0.5 rounded-full text-white font-medium"
+                          style={{ backgroundColor: dept?.color || '#0D1B8E' }}
+                        >
+                          {dept?.name || '—'}
+                        </span>
+                        {role ? <span className="badge-gray">{role}</span> : null}
+                      </React.Fragment>
+                    ))}
                     {!u.isActive && <span className="badge-red">Inactive</span>}
                   </div>
                   {u.lastLogin && (
@@ -408,11 +468,21 @@ export default function TeamPage() {
                 </div>
               </div>
               {(isAdmin || isSuperAdmin) && (
-                <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
-                  <button type="button" onClick={() => { setEditUser(u); setModalOpen(true); }} className="btn-secondary flex-1 py-1.5 text-xs justify-center">Edit</button>
-                  {u.isActive && (
-                    <button type="button" onClick={() => setDeactivateTarget(u)} className="btn-secondary py-1.5 px-3 text-xs text-red-500 hover:bg-red-50">Deactivate</button>
-                  )}
+                <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-100">
+                  <button type="button" onClick={() => { setEditUser(u); setModalOpen(true); }} className="btn-secondary flex-1 min-w-[4rem] py-1.5 text-xs justify-center">Edit</button>
+                  {isSuperAdmin &&
+                    u.isActive &&
+                    String(u._id) !== String(me?._id) &&
+                    u.role !== 'super_admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setTrashTarget(u)}
+                        className="btn-secondary py-1.5 px-3 text-xs text-amber-700 hover:bg-amber-50 inline-flex items-center gap-1"
+                        title="Remove from team and move to Trash"
+                      >
+                        <Archive size={14} /> Move to trash
+                      </button>
+                    )}
                 </div>
               )}
             </div>
@@ -424,10 +494,10 @@ export default function TeamPage() {
         title={editUser ? `Edit — ${editUser.name}` : 'Add Team Member'}>
         <UserForm key={editUser?._id || 'new'} onClose={() => { setModalOpen(false); setEditUser(null); }} existing={editUser} />
       </Modal>
-      <ConfirmDialog open={!!deactivateTarget} onClose={() => setDeactivateTarget(null)}
-        onConfirm={() => deactivateMutation.mutate()} loading={deactivateMutation.isPending}
-        title="Deactivate User" confirmLabel="Deactivate" danger
-        message={`Deactivate "${deactivateTarget?.name}"? They will lose access to the system.`} />
+      <ConfirmDialog open={!!trashTarget} onClose={() => setTrashTarget(null)}
+        onConfirm={() => trashMutation.mutate()} loading={trashMutation.isPending}
+        title="Move to trash" confirmLabel="Move to trash" danger
+        message={`Move "${trashTarget?.name}" to trash? They will lose access immediately. You can restore them from Trash or delete permanently later.`} />
 
       {performanceUser && (
         <EmployeePerformanceModal user={performanceUser} onClose={() => setPerformanceUser(null)} />
