@@ -2,16 +2,79 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 const STORAGE_KEY = 'notification_sound_enabled';
 
-export default function useNotificationSound(src = '/sounds/notification.mp3') {
-  const audioRef = useRef(null);
-  const [enabled, setEnabled] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return saved == null ? true : saved === 'true';
+/** Files in `public/sounds/` — first one that loads is used (see public/sounds/README.txt). */
+const NOTIFICATION_FILENAMES = ['notification.mp3', 'notification.wav', 'notification.ogg', 'notification.m4a'];
+
+function soundUrl(filename) {
+  const base = import.meta.env.BASE_URL || '/';
+  const prefix = base.endsWith('/') ? base : `${base}/`;
+  return `${prefix}sounds/${filename}`;
+}
+
+/** Pick the first URL the browser can decode (404 skips to next). */
+function pickPlayableSrc(urls) {
+  return new Promise((resolve) => {
+    let i = 0;
+    const tryNext = () => {
+      if (i >= urls.length) {
+        resolve(null);
+        return;
+      }
+      const url = urls[i];
+      const a = new Audio();
+      const onOk = () => {
+        cleanup();
+        resolve(url);
+      };
+      const onErr = () => {
+        cleanup();
+        i += 1;
+        tryNext();
+      };
+      const cleanup = () => {
+        a.removeEventListener('canplaythrough', onOk);
+        a.removeEventListener('error', onErr);
+      };
+      a.addEventListener('canplaythrough', onOk, { once: true });
+      a.addEventListener('error', onErr, { once: true });
+      a.preload = 'auto';
+      a.src = url;
+      a.load();
+    };
+    tryNext();
   });
+}
+
+export default function useNotificationSound() {
+  const audioRef = useRef(null);
+  /** Sound is always on — do not persist or allow turning off. */
+  const enabled = true;
   const [isUnlocked, setIsUnlocked] = useState(false);
+  const [resolvedSrc, setResolvedSrc] = useState(null);
 
   useEffect(() => {
-    const audio = new Audio(src);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (_) {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const urls = NOTIFICATION_FILENAMES.map(soundUrl);
+    pickPlayableSrc(urls).then((src) => {
+      if (cancelled || !src) return;
+      setResolvedSrc(src);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!resolvedSrc) return undefined;
+    const audio = new Audio(resolvedSrc);
     audio.preload = 'auto';
     audio.volume = 0.7;
     audioRef.current = audio;
@@ -20,21 +83,21 @@ export default function useNotificationSound(src = '/sounds/notification.mp3') {
       audio.pause();
       audioRef.current = null;
     };
-  }, [src]);
+  }, [resolvedSrc]);
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, String(enabled));
-  }, [enabled]);
+  const lastPlayAt = useRef(0);
 
   const play = useCallback(async () => {
     if (!enabled || !audioRef.current) return;
+    const now = Date.now();
+    // Avoid double beep when room + personal notify fire close together
+    if (now - lastPlayAt.current < 400) return;
+    lastPlayAt.current = now;
 
     try {
-      // Prevent overlap by restarting clip from the beginning.
       audioRef.current.currentTime = 0;
       await audioRef.current.play();
     } catch (err) {
-      // Browser may block autoplay until user interaction.
       console.debug('Notification audio blocked until interaction:', err?.message || err);
     }
   }, [enabled]);
@@ -71,8 +134,10 @@ export default function useNotificationSound(src = '/sounds/notification.mp3') {
 
   return {
     enabled,
-    setEnabled,
+    /** Kept for API compatibility; sound cannot be disabled. */
+    setEnabled: () => {},
     isUnlocked,
+    resolvedSrc,
     play,
     unlock,
   };

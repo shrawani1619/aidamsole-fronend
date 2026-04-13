@@ -5,13 +5,13 @@
 @layer base {
   * { box-sizing: border-box; }
   body {
-    @apply font-sans text-gray-800 bg-surface-secondary;
+    @apply font-sans text-gray-800 bg-palette-mist;
     -webkit-font-smoothing: antialiased;
   }
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { @apply bg-transparent; }
-  ::-webkit-scrollbar-thumb { @apply bg-gray-300 rounded-full; }
-  ::-webkit-scrollbar-thumb:hover { @apply bg-gray-400; }
+  ::-webkit-scrollbar-thumb { @apply bg-palette-mid rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-palette-deep; }
 }
 
 @layer components {
@@ -31,10 +31,10 @@
            disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98];
   }
   .card {
-    @apply bg-white rounded-xl shadow-card border border-gray-100 p-5;
+    @apply bg-white rounded-xl shadow-card border border-palette-faint p-5;
   }
   .input {
-    @apply w-full border border-gray-200 rounded-lg px-3 py-2 text-sm
+    @apply w-full border border-palette-mid rounded-lg px-3 py-2 text-sm
            focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy
            placeholder:text-gray-400 bg-white transition-all duration-150;
   }
@@ -58,20 +58,21 @@
     @apply text-xl font-semibold text-gray-900;
   }
   .table-container {
-    @apply w-full overflow-x-auto rounded-xl border border-gray-100 bg-white shadow-card;
+    @apply w-full overflow-x-auto rounded-xl border border-palette-mid bg-white shadow-card;
   }
   .table {
     @apply w-full text-sm;
   }
   .table th {
-    @apply px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide
-           bg-surface-secondary border-b border-gray-100;
+    @apply px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide
+           bg-palette-soft border-b border-palette-mid;
   }
   .table td {
-    @apply px-4 py-3 border-b border-gray-50 text-gray-700;
+    @apply px-4 py-3 border-b border-palette-faint text-gray-700;
   }
   .table tr:last-child td { @apply border-b-0; }
-  .table tr:hover td { @apply bg-surface-secondary/50; }
+  .table tbody tr:nth-child(even) td { @apply bg-palette-mist; }
+  .table tbody tr:hover td { @apply bg-palette-faint; }
 
   .sidebar-link {
     @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
@@ -115,5 +116,5 @@
 
 /* Skeleton loader */
 .skeleton {
-  @apply bg-gray-200 rounded animate-pulse;
+  @apply bg-palette-soft rounded animate-pulse;
 }

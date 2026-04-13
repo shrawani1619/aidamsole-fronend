@@ -12,10 +12,18 @@ export default {
           'red-dark': '#b71c1c',
           'red-light': '#ef5350',
         },
+        /** Monochrome UI palette (left→right: deep → mist) */
+        palette: {
+          deep: '#A6A6A6',
+          mid: '#BFBFBF',
+          soft: '#D1D1D1',
+          faint: '#E0E0E0',
+          mist: '#EDEDED',
+        },
         surface: {
           DEFAULT: '#ffffff',
-          secondary: '#f8f9fc',
-          tertiary: '#f1f3f9',
+          secondary: '#EDEDED',
+          tertiary: '#E0E0E0',
         }
       },
       fontFamily: {

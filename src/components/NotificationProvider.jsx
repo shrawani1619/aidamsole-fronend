@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Bell, BellOff } from 'lucide-react';
-import { getSocket } from '../services/socket';
+import { Bell } from 'lucide-react';
+import { connectSocket, getSocket } from '../services/socket';
 import useNotificationSound from '../hooks/useNotificationSound';
 
 const NotificationContext = createContext(null);
@@ -20,22 +21,26 @@ function buildToastMessage(payload = {}) {
 }
 
 export default function NotificationProvider({ children }) {
-  const { enabled, setEnabled, play } = useNotificationSound('/sounds/notification.mp3');
+  const { play, unlock } = useNotificationSound();
+  const qc = useQueryClient();
 
   useEffect(() => {
-    const socket = getSocket();
+    // Socket is created in SocketProvider; if this effect runs first, connect immediately.
+    const socket = getSocket() ?? connectSocket();
     if (!socket) return undefined;
 
     const onNewNotification = (payload) => {
-      if (enabled) play();
+      // Chat module: silent socket hints — refresh list + unread badge, no sound/toast
+      if (payload?.silent || payload?.source === 'chat') {
+        qc.invalidateQueries({ queryKey: ['conversations'] });
+        return;
+      }
+      play();
       toast.success(buildToastMessage(payload), { id: `notif-${Date.now()}` });
     };
 
-    // Core real-time notification event.
     socket.on('new_notification', onNewNotification);
     socket.on('notification:new', onNewNotification);
-
-    // Example aliases for domain specific streams.
     socket.on('message:new', onNewNotification);
     socket.on('order:status_updated', onNewNotification);
 
@@ -45,11 +50,11 @@ export default function NotificationProvider({ children }) {
       socket.off('message:new', onNewNotification);
       socket.off('order:status_updated', onNewNotification);
     };
-  }, [enabled, play]);
+  }, [play, qc]);
 
   const value = useMemo(
-    () => ({ notificationSoundEnabled: enabled, setNotificationSoundEnabled: setEnabled }),
-    [enabled, setEnabled]
+    () => ({ notificationSoundEnabled: true, setNotificationSoundEnabled: () => {} }),
+    []
   );
 
   return (
@@ -57,12 +62,16 @@ export default function NotificationProvider({ children }) {
       {children}
       <button
         type="button"
-        onClick={() => setEnabled((prev) => !prev)}
-        className="fixed bottom-4 right-4 z-50 inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-card border border-gray-200 hover:bg-gray-50"
-        title={enabled ? 'Disable notification sound' : 'Enable notification sound'}
+        className="fixed bottom-4 right-4 z-50 inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-card border border-palette-mid hover:bg-palette-mist select-none"
+        title="Tap once if you do not hear notification sounds (browser audio unlock)"
+        aria-label="Test notification sound"
+        onClick={() => {
+          void unlock();
+          void play();
+        }}
       >
-        {enabled ? <Bell size={14} className="text-emerald-600" /> : <BellOff size={14} className="text-gray-500" />}
-        {enabled ? 'Sound On' : 'Sound Off'}
+        <Bell size={14} className="text-emerald-600" aria-hidden />
+        Sound On
       </button>
     </NotificationContext.Provider>
   );

@@ -7,7 +7,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Modal, Input, Select, PageLoader, EmptyState, Avatar, StatCard, ConfirmDialog } from '../../components/ui';
 
 /** Preset brand colors when the typed name matches a common department */
-const DEPT_COLORS = { SEO: '#10B981', 'Paid Ads': '#3B82F6', 'Social Media': '#8B5CF6', 'Web Dev': '#F59E0B', Sales: '#EF4444', Accounts: '#6B7280' };
+const DEPT_COLORS = { SEO: '#10B981', 'Meta Ads': '#1877F2', 'Google Ads': '#4285F4', 'Social Media': '#8B5CF6', 'Web Dev': '#F59E0B', Sales: '#EF4444', Accounts: '#6B7280' };
 
 /** Max members shown on each department card; rest via "View all". */
 const MEMBERS_CARD_PREVIEW = 2;
@@ -107,7 +107,7 @@ function DeptForm({ onClose, existing }) {
   return (
     <div className="space-y-4">
       <Input label="Department Name *" value={form.name} onChange={(e) => handleNameChange(e.target.value)}
-        placeholder="e.g. SEO, Paid Ads, or a custom name" />
+        placeholder="e.g. SEO, Meta Ads, or a custom name" />
       <div>
         <label className="label">Roles</label>
         <div className="flex gap-2 items-end">

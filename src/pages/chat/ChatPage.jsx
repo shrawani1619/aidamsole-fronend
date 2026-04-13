@@ -1,11 +1,21 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Send, Plus, MessageSquare, Search, Users, Upload, FileText, Loader2, X, MoreVertical, Check, CheckCheck } from 'lucide-react';
+import { Send, Plus, MessageSquare, Search, Users, Upload, FileText, Loader2, X, MoreVertical, Check, CheckCheck, Hand } from 'lucide-react';
 import { chatApi, uploadApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
-import { Avatar, PageLoader, EmptyState, Modal } from '../../components/ui';
-import { timeAgo, getInitials } from '../../utils/helpers';
+import { Avatar, PageLoader, Modal } from '../../components/ui';
+import { timeAgo } from '../../utils/helpers';
+
+/** Per-user unread from API (Map serializes to plain object in JSON). */
+function unreadForUser(convo, userId) {
+  if (!convo?.unreadCount || !userId) return 0;
+  const u = String(userId);
+  const uc = convo.unreadCount;
+  if (typeof uc.get === 'function') return Number(uc.get(u)) || 0;
+  const raw = uc[u] ?? uc[String(u)];
+  return Math.max(0, Math.min(999, Number(raw) || 0));
+}
 
 function NewConvoModal({ onClose }) {
   const qc = useQueryClient();
@@ -67,6 +77,8 @@ export default function ChatPage() {
   const { on, emit, joinRoom, onlineUsers } = useSocket() || {};
   const qc = useQueryClient();
   const [activeConvo, setActiveConvo] = useState(null);
+  /** Teammate selected for a new direct chat (no conversation yet) */
+  const [draftPeer, setDraftPeer] = useState(null);
   const [message, setMessage] = useState('');
   const [newConvoOpen, setNewConvoOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -76,9 +88,14 @@ export default function ChatPage() {
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  const { data: convosData, isLoading } = useQuery({
+  const { data: convosData, isLoading: convosLoading } = useQuery({
     queryKey: ['conversations'],
     queryFn: () => chatApi.conversations().then(r => r.data),
+  });
+
+  const { data: usersData, isLoading: usersLoading } = useQuery({
+    queryKey: ['chat-users'],
+    queryFn: () => chatApi.users().then(r => r.data),
   });
 
   const { data: messagesData, refetch: refetchMessages } = useQuery({
@@ -86,6 +103,12 @@ export default function ChatPage() {
     queryFn: () => chatApi.messages(activeConvo._id).then(r => r.data),
     enabled: !!activeConvo,
   });
+
+  // Opening a thread loads messages and clears server unread — refresh sidebar counts
+  useEffect(() => {
+    if (!activeConvo?._id || messagesData === undefined) return;
+    qc.invalidateQueries({ queryKey: ['conversations'] });
+  }, [activeConvo?._id, messagesData, qc]);
 
   const sendMutation = useMutation({
     mutationFn: async ({ file, text, convoId }) => {
@@ -116,6 +139,39 @@ export default function ChatPage() {
     },
   });
 
+  /** Create direct chat with draft peer, optionally send first message / attachment */
+  const openDirectMutation = useMutation({
+    mutationFn: async ({ peer, file, text }) => {
+      const { data } = await chatApi.createConversation({ type: 'direct', participantIds: [peer._id] });
+      const convo = data?.conversation;
+      if (!convo?._id) throw new Error('Could not start chat');
+      if (file) {
+        const { data: up } = await uploadApi.single(file);
+        const fileUrl = up?.file?.url;
+        const fileName = up?.file?.filename || file.name;
+        if (!fileUrl) throw new Error('Upload failed');
+        const isImage = /^image\//.test(file.type || up?.file?.mimetype || '');
+        const caption = (text || '').trim();
+        await chatApi.sendMessage(convo._id, {
+          type: isImage ? 'image' : 'file',
+          text: isImage ? caption : (caption || fileName),
+          fileUrl,
+          fileName,
+        });
+      } else if (text?.trim()) {
+        await chatApi.sendMessage(convo._id, { text: text.trim() });
+      }
+      return convo;
+    },
+    onSuccess: (convo) => {
+      setDraftPeer(null);
+      setMessage('');
+      setPendingFile(null);
+      setActiveConvo(convo);
+      qc.invalidateQueries(['conversations']);
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async ({ messageId, mode }) => {
       await chatApi.deleteMessage(messageId, mode);
@@ -130,12 +186,22 @@ export default function ChatPage() {
   const canSend = !!(message.trim() || pendingFile);
 
   const handleSend = () => {
+    if (draftPeer && !activeConvo) {
+      if (!canSend || openDirectMutation.isPending) return;
+      openDirectMutation.mutate({ peer: draftPeer, file: pendingFile, text: message });
+      return;
+    }
     if (!activeConvo || !canSend || sendMutation.isPending) return;
     sendMutation.mutate({
       file: pendingFile,
       text: message,
       convoId: activeConvo._id,
     });
+  };
+
+  const handleSayHii = () => {
+    if (!draftPeer || activeConvo || openDirectMutation.isPending) return;
+    openDirectMutation.mutate({ peer: draftPeer, text: 'Hii' });
   };
 
   const handlePickFile = () => fileInputRef.current?.click();
@@ -148,7 +214,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     setPendingFile(null);
-  }, [activeConvo?._id]);
+  }, [activeConvo?._id, draftPeer?._id]);
 
   // Socket: listen for messages in active conversation
   useEffect(() => {
@@ -173,15 +239,63 @@ export default function ChatPage() {
     if (activeConvo && joinRoom) joinRoom(activeConvo._id);
   }, [activeConvo]);
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messagesData?.messages]);
+  // Latest messages stay at bottom (WhatsApp-style); scroll after paint
+  useLayoutEffect(() => {
+    const id = requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ block: 'end', behavior: 'auto' });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [messagesData?.messages, activeConvo?._id]);
 
   const rawConversations = convosData?.conversations || [];
   const searchTrim = search.trim();
   const searchLower = searchTrim.toLowerCase();
 
-  const conversations = rawConversations.filter((c) => {
+  const teamUsers = (usersData?.users || []).filter((u) => u._id !== user?._id);
+
+  const findDirectConvoForPeer = (peerId) =>
+    rawConversations.find(
+      (c) =>
+        c.type === 'direct' &&
+        c.participants?.length === 2 &&
+        c.participants.some((p) => p._id === peerId)
+    );
+
+  const otherConvos = rawConversations.filter(
+    (c) => c.type !== 'direct' || c.participants?.length !== 2
+  );
+
+  const teamUsersFiltered = teamUsers.filter((u) => {
+    if (!searchTrim) return true;
+    const n = String(u.name ?? '').toLowerCase();
+    const e = String(u.email ?? '').toLowerCase();
+    const r = String(u.departmentRole ?? '').toLowerCase();
+    return n.includes(searchLower) || e.includes(searchLower) || r.includes(searchLower);
+  });
+
+  /** WhatsApp-style: most recently active DMs first (API user order is arbitrary). */
+  const teamUsersSorted = useMemo(() => {
+    const directActivityTime = (peerId) => {
+      const c = rawConversations.find(
+        (conv) =>
+          conv.type === 'direct' &&
+          conv.participants?.length === 2 &&
+          conv.participants.some((p) => p._id === peerId)
+      );
+      if (!c) return 0;
+      if (c.lastMessage?.timestamp) return new Date(c.lastMessage.timestamp).getTime();
+      if (c.updatedAt) return new Date(c.updatedAt).getTime();
+      return 0;
+    };
+    return [...teamUsersFiltered].sort((a, b) => {
+      const tb = directActivityTime(b._id);
+      const ta = directActivityTime(a._id);
+      if (tb !== ta) return tb - ta;
+      return String(a.name ?? '').localeCompare(String(b.name ?? ''), undefined, { sensitivity: 'base' });
+    });
+  }, [teamUsersFiltered, rawConversations]);
+
+  const otherConvosFiltered = otherConvos.filter((c) => {
     if (!searchTrim) return true;
     const name = String(c.name ?? '').toLowerCase();
     if (name.includes(searchLower)) return true;
@@ -195,7 +309,10 @@ export default function ChatPage() {
       return pn.includes(searchLower) || pe.includes(searchLower);
     });
   });
+
   const messages = messagesData?.messages || [];
+
+  const totalChatUnread = rawConversations.reduce((sum, c) => sum + unreadForUser(c, user?._id), 0);
 
   const getMessageStatus = (msg) => {
     const others = (activeConvo?.participants || []).filter((p) => p._id !== user?._id);
@@ -223,7 +340,26 @@ export default function ChatPage() {
     return onlineUsers?.includes(other?._id);
   };
 
-  if (isLoading) return <PageLoader />;
+  if (convosLoading || usersLoading) return <PageLoader />;
+
+  const isTeamRowActive = (u, convo) => {
+    if (convo) return activeConvo?._id === convo._id;
+    return draftPeer?._id === u._id;
+  };
+
+  const onSelectTeamMember = (u) => {
+    const convo = findDirectConvoForPeer(u._id);
+    if (convo) {
+      setActiveConvo(convo);
+      setDraftPeer(null);
+    } else {
+      setActiveConvo(null);
+      setDraftPeer(u);
+    }
+  };
+
+  /** New DM thread (no messages yet): grey-focused panel, not pure black */
+  const isDraftGreyTheme = !!(draftPeer && !activeConvo);
 
   return (
     <div className="flex h-[calc(100vh-120px)] -m-5 lg:-m-6 overflow-hidden rounded-xl border border-gray-100 shadow-card animate-fade-in">
@@ -231,7 +367,14 @@ export default function ChatPage() {
       <div className="w-72 flex-shrink-0 flex flex-col bg-white border-r border-gray-100">
         <div className="p-4 border-b border-gray-100">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-900">Messages</h2>
+            <div className="flex items-center gap-2 min-w-0">
+              <h2 className="text-sm font-semibold text-gray-900">Messages</h2>
+              {totalChatUnread > 0 && (
+                <span className="inline-flex min-w-[1.25rem] h-5 px-1 items-center justify-center rounded-full bg-emerald-500 text-white text-[10px] font-bold tabular-nums">
+                  {totalChatUnread > 99 ? '99+' : totalChatUnread}
+                </span>
+              )}
+            </div>
             <button onClick={() => setNewConvoOpen(true)} className="p-1.5 bg-brand-navy text-white rounded-lg hover:bg-brand-navy-dark">
               <Plus size={14} />
             </button>
@@ -243,59 +386,131 @@ export default function ChatPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {rawConversations.length === 0 ? (
-            <div className="py-10 text-center">
-              <MessageSquare size={24} className="text-gray-300 mx-auto mb-2" />
-              <p className="text-xs text-gray-400">No conversations yet</p>
-            </div>
-          ) : conversations.length === 0 ? (
+          {teamUsersSorted.length === 0 && otherConvosFiltered.length === 0 ? (
             <div className="py-10 text-center px-3">
-              <Search size={24} className="text-gray-300 mx-auto mb-2" />
-              <p className="text-xs text-gray-500">No conversations match &quot;{searchTrim}&quot;</p>
-              <button type="button" className="text-xs text-brand-navy mt-2 hover:underline" onClick={() => setSearch('')}>
-                Clear search
-              </button>
+              {searchTrim ? (
+                <>
+                  <Search size={24} className="text-gray-300 mx-auto mb-2" />
+                  <p className="text-xs text-gray-500">No team members or chats match &quot;{searchTrim}&quot;</p>
+                  <button type="button" className="text-xs text-brand-navy mt-2 hover:underline" onClick={() => setSearch('')}>
+                    Clear search
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Users size={24} className="text-gray-300 mx-auto mb-2" />
+                  <p className="text-xs text-gray-400">No team members to message</p>
+                </>
+              )}
             </div>
-          ) : conversations.map(convo => {
-            const otherUser = getConvoAvatar(convo);
-            const online = isOnline(convo);
-            const isActive = activeConvo?._id === convo._id;
-            return (
-              <button key={convo._id} onClick={() => setActiveConvo(convo)}
-                className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-surface-secondary transition-colors ${isActive ? 'bg-brand-navy/5 border-r-2 border-brand-navy' : ''}`}>
-                <div className="relative flex-shrink-0">
-                  {otherUser ? <Avatar user={otherUser} size="md" /> : (
-                    <div className="w-9 h-9 rounded-full bg-brand-navy/10 flex items-center justify-center text-brand-navy text-xs font-bold">
-                      <Users size={14} />
-                    </div>
-                  )}
-                  {online && <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-gray-900 truncate">{getConvoName(convo)}</p>
-                    {convo.lastMessage?.timestamp && (
-                      <p className="text-xs text-gray-400 flex-shrink-0 ml-2">{timeAgo(convo.lastMessage.timestamp)}</p>
-                    )}
-                  </div>
-                  {convo.lastMessage?.text && (
-                    <p className="text-xs text-gray-400 truncate">{convo.lastMessage.text}</p>
-                  )}
-                </div>
-              </button>
-            );
-          })}
+          ) : (
+            <>
+              {teamUsersSorted.length > 0 && (
+                <>
+                  <div className="px-4 pt-3 pb-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Team</div>
+                  {teamUsersSorted.map((u) => {
+                    const convo = findDirectConvoForPeer(u._id);
+                    const online = onlineUsers?.includes(u._id);
+                    const isActive = isTeamRowActive(u, convo);
+                    const rowUnread = convo ? unreadForUser(convo, user?._id) : 0;
+                    return (
+                      <button
+                        key={u._id}
+                        type="button"
+                        onClick={() => onSelectTeamMember(u)}
+                        className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-surface-secondary transition-colors ${isActive ? 'bg-brand-navy/5 border-r-2 border-brand-navy' : ''}`}
+                      >
+                        <div className="relative flex-shrink-0">
+                          <Avatar user={u} size="md" />
+                          {rowUnread > 0 && (
+                            <span className="absolute -top-1 -right-1 min-w-[1.125rem] h-[1.125rem] px-0.5 flex items-center justify-center rounded-full bg-emerald-500 text-white text-[9px] font-bold leading-none border-2 border-white tabular-nums z-10">
+                              {rowUnread > 99 ? '99+' : rowUnread}
+                            </span>
+                          )}
+                          {online && <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-medium text-gray-900 truncate">{u.name}</p>
+                            {convo?.lastMessage?.timestamp && (
+                              <p className="text-xs text-gray-400 flex-shrink-0">{timeAgo(convo.lastMessage.timestamp)}</p>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-400 truncate min-h-[1rem]">
+                            {convo?.lastMessage?.text ? convo.lastMessage.text : '\u00a0'}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </>
+              )}
+              {otherConvosFiltered.length > 0 && (
+                <>
+                  <div className="px-4 pt-3 pb-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Groups &amp; more</div>
+                  {otherConvosFiltered.map((convo) => {
+                    const otherUser = getConvoAvatar(convo);
+                    const online = isOnline(convo);
+                    const isActive = activeConvo?._id === convo._id;
+                    const rowUnread = unreadForUser(convo, user?._id);
+                    return (
+                      <button
+                        key={convo._id}
+                        type="button"
+                        onClick={() => {
+                          setActiveConvo(convo);
+                          setDraftPeer(null);
+                        }}
+                        className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-surface-secondary transition-colors ${isActive ? 'bg-brand-navy/5 border-r-2 border-brand-navy' : ''}`}
+                      >
+                        <div className="relative flex-shrink-0">
+                          {otherUser ? (
+                            <Avatar user={otherUser} size="md" />
+                          ) : (
+                            <div className="w-9 h-9 rounded-full bg-brand-navy/10 flex items-center justify-center text-brand-navy text-xs font-bold">
+                              <Users size={14} />
+                            </div>
+                          )}
+                          {rowUnread > 0 && (
+                            <span className="absolute -top-1 -right-1 min-w-[1.125rem] h-[1.125rem] px-0.5 flex items-center justify-center rounded-full bg-emerald-500 text-white text-[9px] font-bold leading-none border-2 border-white tabular-nums z-10">
+                              {rowUnread > 99 ? '99+' : rowUnread}
+                            </span>
+                          )}
+                          {online && <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium text-gray-900 truncate">{getConvoName(convo)}</p>
+                            {convo.lastMessage?.timestamp && (
+                              <p className="text-xs text-gray-400 flex-shrink-0 ml-2">{timeAgo(convo.lastMessage.timestamp)}</p>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-400 truncate min-h-[1rem]">
+                            {convo.lastMessage?.text ? convo.lastMessage.text : '\u00a0'}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </>
+              )}
+            </>
+          )}
         </div>
       </div>
 
       {/* Chat area */}
-      <div className="flex-1 flex flex-col bg-surface-secondary">
-        {!activeConvo ? (
+      <div
+        className={`flex-1 flex flex-col min-h-0 ${
+          isDraftGreyTheme ? 'bg-neutral-800' : 'bg-surface-secondary'
+        }`}
+      >
+        {!activeConvo && !draftPeer ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <MessageSquare size={40} className="text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500 text-sm">Select a conversation to start chatting</p>
-              <button onClick={() => setNewConvoOpen(true)} className="btn-primary mt-4 mx-auto">
+              <p className="text-gray-500 text-sm">Select a team member or conversation</p>
+              <button type="button" onClick={() => setNewConvoOpen(true)} className="btn-primary mt-4 mx-auto">
                 <Plus size={15} /> New Chat
               </button>
             </div>
@@ -303,25 +518,71 @@ export default function ChatPage() {
         ) : (
           <>
             {/* Header */}
-            <div className="px-5 py-3.5 bg-white border-b border-gray-100 flex items-center gap-3">
-              {getConvoAvatar(activeConvo) ? (
-                <div className="relative">
-                  <Avatar user={getConvoAvatar(activeConvo)} size="md" />
-                  {isOnline(activeConvo) && <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white" />}
-                </div>
+            <div
+              className={`px-5 py-3.5 border-b flex items-center gap-3 flex-shrink-0 ${
+                isDraftGreyTheme
+                  ? 'bg-neutral-800/95 border-neutral-700'
+                  : 'bg-white border-gray-100'
+              }`}
+            >
+              {draftPeer && !activeConvo ? (
+                <>
+                  <div className="relative">
+                    <Avatar user={draftPeer} size="md" />
+                    {onlineUsers?.includes(draftPeer._id) && (
+                      <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-neutral-800" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-neutral-100">{draftPeer.name}</p>
+                    <p className="text-xs text-neutral-400">{onlineUsers?.includes(draftPeer._id) ? '🟢 Online' : 'Offline'}</p>
+                  </div>
+                </>
               ) : (
-                <div className="w-9 h-9 rounded-full bg-brand-navy/10 flex items-center justify-center"><Users size={16} className="text-brand-navy" /></div>
+                <>
+                  {getConvoAvatar(activeConvo) ? (
+                    <div className="relative">
+                      <Avatar user={getConvoAvatar(activeConvo)} size="md" />
+                      {isOnline(activeConvo) && <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white" />}
+                    </div>
+                  ) : (
+                    <div className="w-9 h-9 rounded-full bg-brand-navy/10 flex items-center justify-center"><Users size={16} className="text-brand-navy" /></div>
+                  )}
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">{getConvoName(activeConvo)}</p>
+                    <p className="text-xs text-gray-400">
+                      {activeConvo.type === 'group' ? `${activeConvo.participants?.length} members` : isOnline(activeConvo) ? '🟢 Online' : 'Offline'}
+                    </p>
+                  </div>
+                </>
               )}
-              <div>
-                <p className="text-sm font-semibold text-gray-900">{getConvoName(activeConvo)}</p>
-                <p className="text-xs text-gray-400">
-                  {activeConvo.type === 'group' ? `${activeConvo.participants?.length} members` : isOnline(activeConvo) ? '🟢 Online' : 'Offline'}
-                </p>
-              </div>
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-3">
+            <div
+              className={`flex-1 overflow-y-auto min-h-0 p-5 space-y-3 ${
+                isDraftGreyTheme ? 'bg-neutral-800' : ''
+              }`}
+            >
+              {draftPeer && !activeConvo ? (
+                <div className="h-full min-h-[240px] flex flex-col items-center justify-center text-center gap-5 px-2">
+                  <div className="w-full max-w-md rounded-2xl border border-neutral-600/70 bg-neutral-700/45 px-6 py-8 shadow-inner">
+                    <p className="text-sm text-neutral-300 leading-relaxed">
+                      No messages yet. Say hello to start the conversation.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleSayHii}
+                      disabled={openDirectMutation.isPending}
+                      className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-neutral-600 text-neutral-50 text-sm font-medium border border-neutral-500/60 hover:bg-neutral-500 transition-colors disabled:opacity-50 shadow-md"
+                    >
+                      {openDirectMutation.isPending ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />}
+                      Say Hii
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
               {messages.map(msg => {
                 const isMine = msg.senderId?._id === user?._id || msg.senderId === user?._id;
                 const status = isMine ? getMessageStatus(msg) : null;
@@ -430,11 +691,19 @@ export default function ChatPage() {
                   </div>
                 );
               })}
-              <div ref={messagesEndRef} />
+                  <div ref={messagesEndRef} />
+                </>
+              )}
             </div>
 
             {/* Input */}
-            <div className="px-5 py-4 bg-white border-t border-gray-100 space-y-2">
+            <div
+              className={`px-5 py-4 border-t space-y-2 flex-shrink-0 ${
+                isDraftGreyTheme
+                  ? 'bg-neutral-800 border-neutral-700'
+                  : 'bg-white border-gray-100'
+              }`}
+            >
               <input
                 ref={fileInputRef}
                 type="file"
@@ -443,41 +712,79 @@ export default function ChatPage() {
                 onChange={handleFileChange}
               />
               {pendingFile && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-secondary border border-gray-200 text-sm text-gray-800">
-                  <FileText size={16} className="text-brand-navy flex-shrink-0" />
+                <div
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm ${
+                    isDraftGreyTheme
+                      ? 'bg-neutral-700/70 border-neutral-600 text-neutral-100'
+                      : 'bg-surface-secondary border-gray-200 text-gray-800'
+                  }`}
+                >
+                  <FileText size={16} className={`flex-shrink-0 ${isDraftGreyTheme ? 'text-neutral-300' : 'text-brand-navy'}`} />
                   <span className="flex-1 min-w-0 truncate font-medium" title={pendingFile.name}>{pendingFile.name}</span>
                   <button
                     type="button"
                     onClick={() => setPendingFile(null)}
-                    className="p-1 rounded-md text-gray-500 hover:text-gray-800 hover:bg-white/80"
+                    className={`p-1 rounded-md ${
+                      isDraftGreyTheme
+                        ? 'text-neutral-400 hover:text-neutral-100 hover:bg-neutral-600/80'
+                        : 'text-gray-500 hover:text-gray-800 hover:bg-white/80'
+                    }`}
                     aria-label="Remove attachment"
                   >
                     <X size={16} />
                   </button>
                 </div>
               )}
-              <div className="flex items-center gap-3 rounded-xl border-2 border-gray-400 bg-gray-50 px-4 py-2.5 shadow-sm">
+              <div
+                className={`flex items-center gap-3 rounded-xl border-2 px-4 py-2.5 shadow-sm ${
+                  isDraftGreyTheme
+                    ? 'border-neutral-600 bg-neutral-700/40'
+                    : 'border-gray-400 bg-gray-50'
+                }`}
+              >
                 <button
                   type="button"
                   onClick={handlePickFile}
-                  disabled={sendMutation.isPending}
+                  disabled={draftPeer ? openDirectMutation.isPending : sendMutation.isPending}
                   title="Attach file"
-                  className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-lg text-gray-600 hover:text-brand-navy hover:bg-white transition-colors disabled:opacity-40"
+                  className={`w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-lg transition-colors disabled:opacity-40 ${
+                    isDraftGreyTheme
+                      ? 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-600/60'
+                      : 'text-gray-600 hover:text-brand-navy hover:bg-white'
+                  }`}
                 >
                   <Upload size={18} />
                 </button>
                 <input value={message} onChange={e => setMessage(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && canSend && (e.preventDefault(), handleSend())}
-                  placeholder={pendingFile ? 'Add a caption (optional)...' : `Message ${getConvoName(activeConvo)}...`}
-                  className="flex-1 bg-transparent text-sm outline-none text-gray-900 placeholder:text-gray-400"
+                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && canSend && !((draftPeer ? openDirectMutation.isPending : sendMutation.isPending)) && (e.preventDefault(), handleSend())}
+                  placeholder={
+                    pendingFile
+                      ? 'Add a caption (optional)...'
+                      : draftPeer
+                        ? `Message ${draftPeer.name}...`
+                        : `Message ${getConvoName(activeConvo)}...`
+                  }
+                  className={`flex-1 bg-transparent text-sm outline-none ${
+                    isDraftGreyTheme
+                      ? 'text-neutral-100 placeholder:text-neutral-500'
+                      : 'text-gray-900 placeholder:text-gray-400'
+                  }`}
                 />
                 <button
                   type="button"
                   onClick={handleSend}
-                  disabled={!canSend || sendMutation.isPending}
-                  className="w-8 h-8 bg-brand-navy text-white rounded-lg flex items-center justify-center hover:bg-brand-navy-dark transition-colors disabled:opacity-50"
+                  disabled={!canSend || (draftPeer ? openDirectMutation.isPending : sendMutation.isPending)}
+                  className={`w-8 h-8 text-white rounded-lg flex items-center justify-center transition-colors disabled:opacity-50 ${
+                    isDraftGreyTheme
+                      ? 'bg-neutral-600 hover:bg-neutral-500'
+                      : 'bg-brand-navy hover:bg-brand-navy-dark'
+                  }`}
                 >
-                  {sendMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                  {(draftPeer ? openDirectMutation.isPending : sendMutation.isPending) ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Send size={14} />
+                  )}
                 </button>
               </div>
             </div>

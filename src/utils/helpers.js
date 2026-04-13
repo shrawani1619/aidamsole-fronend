@@ -52,8 +52,14 @@ export const priorityColors = {
 };
 
 export const DEPT_COLORS = {
-  'SEO': '#10B981', 'Paid Ads': '#3B82F6', 'Social Media': '#8B5CF6',
-  'Web Dev': '#F59E0B', 'Sales': '#EF4444', 'Accounts': '#6B7280'
+  'SEO': '#10B981',
+  'Organic Marketing': '#059669',
+  'Meta Ads': '#1877F2',
+  'Google Ads': '#4285F4',
+  'Social Media': '#8B5CF6',
+  'Web Dev': '#F59E0B',
+  'Sales': '#EF4444',
+  'Accounts': '#6B7280',
 };
 
 export const truncate = (str, n = 40) => str?.length > n ? str.slice(0, n) + '...' : str;

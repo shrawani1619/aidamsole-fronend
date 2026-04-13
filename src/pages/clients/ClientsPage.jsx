@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Plus, Filter, Search, Users, AlertTriangle, TrendingUp, RefreshCw, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -17,7 +17,7 @@ const STATUS_OPTS = [
   { value: 'lead', label: 'Lead' }, { value: 'paused', label: 'Paused' }, { value: 'churned', label: 'Churned' }
 ];
 
-const SERVICES_OPTS = ['SEO', 'Paid Ads', 'Social Media', 'Web Dev', 'Email Marketing', 'Content', 'Other'];
+const SERVICES_OPTS = ['SEO', 'Organic Marketing', 'Meta Ads', 'Google Ads', 'Social Media', 'Web Dev', 'Email Marketing', 'Content', 'Other'];
 
 function ClientForm({ onClose, existing }) {
   const qc = useQueryClient();
@@ -143,10 +143,12 @@ export default function ClientsPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [page, setPage] = useState(1);
 
+  const PAGE_SIZE = 100;
+
   const { data, isLoading } = useQuery({
     queryKey: ['clients', { search, status, page }],
-    queryFn: () => clientsApi.list({ search, status, page, limit: 15 }).then(r => r.data),
-    keepPreviousData: true,
+    queryFn: () => clientsApi.list({ search, status, page, limit: PAGE_SIZE }).then(r => r.data),
+    placeholderData: keepPreviousData,
   });
 
   const deleteMutation = useMutation({
@@ -157,8 +159,8 @@ export default function ClientsPage() {
   const clients = data?.clients || [];
   const total = data?.total || 0;
   const pages = data?.pages || 1;
-
-  const statusCount = (s) => clients.filter(c => c.status === s).length;
+  /** Full counts for current search/service scope (not limited to current page or status filter) */
+  const statusCounts = data?.statusCounts || {};
 
   if (isLoading) return <PageLoader />;
 
@@ -178,10 +180,10 @@ export default function ClientsPage() {
 
       {/* Quick stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Active" value={clients.filter(c => c.status === 'active').length} color="text-green-600" />
-        <StatCard label="At Risk" value={clients.filter(c => c.status === 'at_risk').length} color="text-red-600" />
-        <StatCard label="Onboarding" value={clients.filter(c => c.status === 'onboarding').length} color="text-blue-600" />
-        <StatCard label="Churned" value={clients.filter(c => c.status === 'churned').length} color="text-gray-500" />
+        <StatCard label="Active" value={statusCounts.active ?? 0} color="text-green-600" />
+        <StatCard label="At Risk" value={statusCounts.at_risk ?? 0} color="text-red-600" />
+        <StatCard label="Onboarding" value={statusCounts.onboarding ?? 0} color="text-blue-600" />
+        <StatCard label="Churned" value={statusCounts.churned ?? 0} color="text-gray-500" />
       </div>
 
       {/* Filters */}
@@ -197,6 +199,7 @@ export default function ClientsPage() {
         <table className="table">
           <thead>
             <tr>
+              <th className="w-14 text-center">Sr.</th>
               <th>Client</th>
               <th>Services</th>
               <th>AM</th>
@@ -210,11 +213,13 @@ export default function ClientsPage() {
           </thead>
           <tbody>
             {clients.length === 0 ? (
-              <tr><td colSpan={isAdmin ? 9 : 8}><EmptyState icon={Users} title="No clients found" description="Adjust filters or add your first client" /></td></tr>
-            ) : clients.map(client => {
+              <tr><td colSpan={isAdmin ? 10 : 9}><EmptyState icon={Users} title="No clients found" description="Adjust filters or add your first client" /></td></tr>
+            ) : clients.map((client, index) => {
               const days = daysUntil(client.renewalDate);
+              const sr = (page - 1) * PAGE_SIZE + index + 1;
               return (
                 <tr key={client._id}>
+                  <td className="text-center text-xs text-gray-500 tabular-nums align-middle">{sr}</td>
                   <td>
                     <Link to={`/clients/${client._id}`} className="flex items-center gap-2.5 group">
                       <div className="w-8 h-8 rounded-lg bg-brand-navy/10 flex items-center justify-center text-brand-navy text-xs font-bold flex-shrink-0">
@@ -296,12 +301,20 @@ export default function ClientsPage() {
         </table>
       </div>
 
-      {/* Pagination */}
+      {/* Pagination — 100 clients per page */}
       {pages > 1 && (
-        <div className="flex items-center justify-center gap-2">
-          <button className="btn-secondary py-1 px-3 text-xs" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>Prev</button>
-          <span className="text-sm text-gray-500">Page {page} of {pages}</span>
-          <button className="btn-secondary py-1 px-3 text-xs" onClick={() => setPage(p => Math.min(pages, p + 1))} disabled={page === pages}>Next</button>
+        <div className="flex items-center justify-center gap-2 flex-wrap">
+          <button type="button" className="btn-secondary py-1 px-3 text-xs" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>Prev</button>
+          <span className="text-sm text-gray-500">
+            Page {page} of {pages}
+            {total > 0 && (
+              <span className="text-gray-400">
+                {' '}
+                ({Math.min((page - 1) * PAGE_SIZE + 1, total)}–{Math.min(page * PAGE_SIZE, total)} of {total})
+              </span>
+            )}
+          </span>
+          <button type="button" className="btn-secondary py-1 px-3 text-xs" onClick={() => setPage((p) => Math.min(pages, p + 1))} disabled={page === pages}>Next</button>
         </div>
       )}
 

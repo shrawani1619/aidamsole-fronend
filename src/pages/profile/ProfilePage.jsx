@@ -370,7 +370,7 @@ export default function ProfilePage() {
               <span>Stack:</span><span>React + Node.js + MongoDB</span>
               <span>Real-time:</span><span>Socket.io</span>
               <span>Auth:</span><span>JWT + RBAC</span>
-              <span>Departments:</span><span>SEO, Paid Ads, Social, Web Dev, Sales, Accounts</span>
+              <span>Departments:</span><span>SEO, Meta Ads, Google Ads, Social, Web Dev, Sales, Accounts</span>
             </div>
           </div>
           <div className="text-xs text-gray-400">

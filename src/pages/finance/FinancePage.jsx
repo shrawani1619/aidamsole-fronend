@@ -46,7 +46,7 @@ function InvoiceForm({ onClose, existing }) {
   const taxAmount = (subtotal * (form.taxRate || 0)) / 100;
   const total     = subtotal + taxAmount - (parseFloat(form.discount) || 0);
 
-  const SERVICES = ['SEO', 'Paid Ads', 'Social Media', 'Web Dev', 'Email Marketing', 'Content', 'Other'];
+  const SERVICES = ['SEO', 'Organic Marketing', 'Meta Ads', 'Google Ads', 'Social Media', 'Web Dev', 'Email Marketing', 'Content', 'Other'];
 
   const mutation = useMutation({
     mutationFn: data => existing ? financeApi.update(existing._id, data) : financeApi.create(data),

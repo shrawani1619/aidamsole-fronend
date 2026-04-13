@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Plus, FolderKanban, Calendar, Users, ChevronDown, Eye, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -18,12 +18,12 @@ const PRIORITY_OPTS = [
   { value: '', label: 'All Priority' }, { value: 'critical', label: 'Critical' },
   { value: 'high', label: 'High' }, { value: 'medium', label: 'Medium' }, { value: 'low', label: 'Low' }
 ];
-const SERVICE_OPTS = ['SEO', 'Paid Ads', 'Social Media', 'Web Dev', 'Email Marketing', 'Content', 'Other'];
+const SERVICE_OPTS = ['SEO', 'Organic Marketing', 'Meta Ads', 'Google Ads', 'Social Media', 'Web Dev', 'Email Marketing', 'Content', 'Other'];
 
 function normalizeServicesFromProject(s) {
   if (Array.isArray(s) && s.length) return s;
   if (typeof s === 'string' && s) return [s];
-  return ['SEO'];
+  return [];
 }
 
 function formatProjectServices(s, serviceOtherDetail) {
@@ -119,10 +119,6 @@ function ProjectForm({ onClose, existing }) {
   const toggleService = (svc) => {
     setForm((p) => {
       const has = p.service.includes(svc);
-      if (has && p.service.length === 1) {
-        toast.error('Keep at least one service selected');
-        return p;
-      }
       const next = has ? p.service.filter((x) => x !== svc) : [...p.service, svc];
       return {
         ...p,
@@ -220,7 +216,7 @@ function ProjectForm({ onClose, existing }) {
                 ))}
               </div>
               {form.service.includes('Other') && (
-                <div className="shrink-0 border-t border-gray-100 bg-surface-secondary/90 px-3 py-2.5">
+                <div className="shrink-0 border-t border-palette-faint bg-palette-mist/90 px-3 py-2.5">
                   <label className="text-xs font-medium text-gray-700">Describe other service *</label>
                   <input
                     type="text"
@@ -284,16 +280,25 @@ export default function ProjectsPage() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [priority, setPriority] = useState('');
+  const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
   const [editProject, setEditProject] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
+  const PAGE_SIZE = 100;
+
   const { data, isLoading } = useQuery({
-    queryKey: ['projects', { search, status, priority }],
-    queryFn: () => projectsApi.list({ search, status, priority, limit: 30 }).then(r => r.data),
+    queryKey: ['projects', { search, status, priority, page }],
+    queryFn: () =>
+      projectsApi.list({ search, status, priority, page, limit: PAGE_SIZE }).then((r) => r.data),
+    placeholderData: keepPreviousData,
   });
 
   const projects = data?.projects || [];
+  const total = data?.total ?? projects.length;
+  const pages = data?.pages ?? 1;
+  /** Full counts for current filters except status (not limited to current page) */
+  const statusCounts = data?.statusCounts || {};
   const canToggleProject = canModule('projects', 'edit');
 
   const statusToggleMutation = useMutation({
@@ -323,7 +328,7 @@ export default function ProjectsPage() {
       <div className="page-header">
         <div>
           <h2 className="page-title">Projects</h2>
-          <p className="text-sm text-gray-500">{projects.length} projects</p>
+          <p className="text-sm text-gray-500">{total} total projects</p>
         </div>
         {canManage && (
           <button className="btn-primary" onClick={() => { setEditProject(null); setModalOpen(true); }}>
@@ -335,18 +340,44 @@ export default function ProjectsPage() {
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {['active', 'planning', 'completed', 'on_hold'].map(s => (
-          <StatCard key={s} label={slugToLabel(s)} value={projects.filter(p => p.status === s).length}
-            color={s === 'active' ? 'text-green-600' : s === 'on_hold' ? 'text-amber-600' : 'text-gray-900'} />
+          <StatCard
+            key={s}
+            label={slugToLabel(s)}
+            value={statusCounts[s] ?? 0}
+            color={s === 'active' ? 'text-green-600' : s === 'on_hold' ? 'text-amber-600' : 'text-gray-900'}
+          />
         ))}
       </div>
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
-        <SearchInput value={search} onChange={e => setSearch(e.target.value)} placeholder="Search projects..." className="flex-1" />
-        <select value={status} onChange={e => setStatus(e.target.value)} className="input w-full sm:w-36">
+        <SearchInput
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
+          placeholder="Search projects..."
+          className="flex-1"
+        />
+        <select
+          value={status}
+          onChange={(e) => {
+            setStatus(e.target.value);
+            setPage(1);
+          }}
+          className="input w-full sm:w-36"
+        >
           {STATUS_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-        <select value={priority} onChange={e => setPriority(e.target.value)} className="input w-full sm:w-36">
+        <select
+          value={priority}
+          onChange={(e) => {
+            setPriority(e.target.value);
+            setPage(1);
+          }}
+          className="input w-full sm:w-36"
+        >
           {PRIORITY_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </div>
@@ -356,14 +387,18 @@ export default function ProjectsPage() {
         <EmptyState icon={FolderKanban} title="No projects found" description="Create your first project to get started" />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {projects.map(p => {
+          {projects.map((p, index) => {
             const overdue = p.dueDate && p.status !== 'completed' && isOverdue(p.dueDate);
+            const sr = (page - 1) * PAGE_SIZE + index + 1;
             return (
               <div key={p._id} className="card hover:shadow-card-hover transition-shadow group">
                 {/* Header */}
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="text-[10px] font-semibold text-gray-500 tabular-nums shrink-0" title="Serial number">
+                        Sr.{sr}
+                      </span>
                       <span className={`text-xs ${statusClass[p.status] || 'badge-gray'}`}>{projectStatusLabel(p.status)}</span>
                       {p.status !== 'on_hold' && (
                         <>
@@ -415,7 +450,7 @@ export default function ProjectsPage() {
                 </div>
 
                 {/* Team avatars + actions */}
-                <div className="flex items-center gap-1 mt-3 pt-3 border-t border-gray-100">
+                <div className="flex items-center gap-1 mt-3 pt-3 border-t border-palette-faint">
                   {p.team?.length > 0 ? (
                     <>
                     {p.team.slice(0, 4).map(m => (
@@ -466,6 +501,36 @@ export default function ProjectsPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {pages > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          <button
+            type="button"
+            className="btn-secondary py-1 px-3 text-xs"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+          >
+            Prev
+          </button>
+          <span className="text-sm text-gray-500">
+            Page {page} of {pages}
+            {total > 0 && (
+              <span className="text-gray-400">
+                {' '}
+                ({Math.min((page - 1) * PAGE_SIZE + 1, total)}–{Math.min(page * PAGE_SIZE, total)} of {total})
+              </span>
+            )}
+          </span>
+          <button
+            type="button"
+            className="btn-secondary py-1 px-3 text-xs"
+            onClick={() => setPage((p) => Math.min(pages, p + 1))}
+            disabled={page === pages}
+          >
+            Next
+          </button>
         </div>
       )}
 
