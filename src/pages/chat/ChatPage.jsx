@@ -177,10 +177,24 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messagesData?.messages]);
 
-  const conversations = (convosData?.conversations || []).filter(c =>
-    !search || c.name?.toLowerCase().includes(search.toLowerCase()) ||
-    c.participants?.some(p => p.name?.toLowerCase().includes(search.toLowerCase()))
-  );
+  const rawConversations = convosData?.conversations || [];
+  const searchTrim = search.trim();
+  const searchLower = searchTrim.toLowerCase();
+
+  const conversations = rawConversations.filter((c) => {
+    if (!searchTrim) return true;
+    const name = String(c.name ?? '').toLowerCase();
+    if (name.includes(searchLower)) return true;
+    const lastText = String(c.lastMessage?.text ?? '').toLowerCase();
+    if (lastText.includes(searchLower)) return true;
+    const parts = c.participants || [];
+    return parts.some((p) => {
+      if (!p || typeof p !== 'object') return false;
+      const pn = String(p.name ?? '').toLowerCase();
+      const pe = String(p.email ?? '').toLowerCase();
+      return pn.includes(searchLower) || pe.includes(searchLower);
+    });
+  });
   const messages = messagesData?.messages || [];
 
   const getMessageStatus = (msg) => {
@@ -229,10 +243,18 @@ export default function ChatPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {conversations.length === 0 ? (
+          {rawConversations.length === 0 ? (
             <div className="py-10 text-center">
               <MessageSquare size={24} className="text-gray-300 mx-auto mb-2" />
               <p className="text-xs text-gray-400">No conversations yet</p>
+            </div>
+          ) : conversations.length === 0 ? (
+            <div className="py-10 text-center px-3">
+              <Search size={24} className="text-gray-300 mx-auto mb-2" />
+              <p className="text-xs text-gray-500">No conversations match &quot;{searchTrim}&quot;</p>
+              <button type="button" className="text-xs text-brand-navy mt-2 hover:underline" onClick={() => setSearch('')}>
+                Clear search
+              </button>
             </div>
           ) : conversations.map(convo => {
             const otherUser = getConvoAvatar(convo);
@@ -303,13 +325,21 @@ export default function ChatPage() {
               {messages.map(msg => {
                 const isMine = msg.senderId?._id === user?._id || msg.senderId === user?._id;
                 const status = isMine ? getMessageStatus(msg) : null;
-                const isDeletedForEveryone = msg.isDeleted || msg.type === 'system';
+                const isDeletedForEveryone =
+                  msg.isDeleted === true ||
+                  (msg.type === 'system' && String(msg.text || '').includes('deleted'));
                 return (
                   <div key={msg._id} className={`flex items-end gap-2.5 ${isMine ? 'flex-row-reverse' : ''}`}>
                     {!isMine && <Avatar user={msg.senderId} size="xs" />}
-                    <div className={`group relative max-w-[70%] px-4 py-2.5 rounded-2xl text-sm ${
-                      isMine ? 'bg-brand-navy text-white rounded-br-sm' : 'bg-white text-gray-800 shadow-card rounded-bl-sm'
-                    }`}>
+                    <div
+                      className={`group relative max-w-[70%] px-4 py-2.5 text-sm rounded-2xl ${
+                        isDeletedForEveryone
+                          ? 'bg-gray-100 text-gray-600 border border-gray-200 shadow-sm'
+                          : isMine
+                            ? 'bg-brand-navy text-white rounded-br-sm'
+                            : 'bg-white text-gray-800 shadow-card rounded-bl-sm'
+                      }`}
+                    >
                       {isMine && !isDeletedForEveryone && (
                         <button
                           type="button"
@@ -342,8 +372,11 @@ export default function ChatPage() {
                           </button>
                         </div>
                       )}
-                      {!isMine && activeConvo.type === 'group' && (
+                      {!isMine && activeConvo.type === 'group' && !isDeletedForEveryone && (
                         <p className="text-xs font-semibold text-brand-navy mb-1">{msg.senderId?.name}</p>
+                      )}
+                      {!isMine && activeConvo.type === 'group' && isDeletedForEveryone && msg.senderId?.name && (
+                        <p className="text-[10px] font-medium text-gray-500 mb-1">{msg.senderId.name}</p>
                       )}
                       {msg.type === 'image' && msg.fileUrl && !isDeletedForEveryone && (
                         <a href={msg.fileUrl} target="_blank" rel="noopener noreferrer" className="block">
@@ -375,12 +408,16 @@ export default function ChatPage() {
                       {msg.type === 'image' && msg.text && !isDeletedForEveryone && (
                         <p className={`mt-1.5 text-sm ${isMine ? 'text-white/95' : 'text-gray-800'}`}>{msg.text}</p>
                       )}
-                      {(msg.type === 'text' || isDeletedForEveryone) && msg.text && (
-                        <p className={isDeletedForEveryone ? 'italic opacity-80' : ''}>{msg.text}</p>
+                      {(msg.type === 'text' || msg.type === 'system' || isDeletedForEveryone) && msg.text && (
+                        <p className={isDeletedForEveryone ? 'italic text-sm' : ''}>{msg.text}</p>
                       )}
-                      <div className={`text-xs mt-1 flex items-center gap-1 justify-end ${isMine ? 'text-white/60' : 'text-gray-400'}`}>
+                      <div
+                        className={`text-xs mt-1 flex items-center gap-1 justify-end ${
+                          isDeletedForEveryone ? 'text-gray-400' : isMine ? 'text-white/60' : 'text-gray-400'
+                        }`}
+                      >
                         <span>{timeAgo(msg.createdAt)}</span>
-                        {isMine && (
+                        {isMine && !isDeletedForEveryone && (
                           <span
                             className={status === 'seen' ? 'text-sky-300' : 'text-white/70'}
                             title={status === 'seen' ? 'Seen' : status === 'delivered' ? 'Delivered' : 'Sent'}
@@ -419,20 +456,20 @@ export default function ChatPage() {
                   </button>
                 </div>
               )}
-              <div className="flex items-center gap-3 bg-neutral-700 rounded-xl px-4 py-2.5">
+              <div className="flex items-center gap-3 rounded-xl border-2 border-gray-400 bg-gray-50 px-4 py-2.5 shadow-sm">
                 <button
                   type="button"
                   onClick={handlePickFile}
                   disabled={sendMutation.isPending}
                   title="Attach file"
-                  className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-lg text-white hover:text-white hover:bg-neutral-600/80 transition-colors disabled:opacity-40"
+                  className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-lg text-gray-600 hover:text-brand-navy hover:bg-white transition-colors disabled:opacity-40"
                 >
                   <Upload size={18} />
                 </button>
                 <input value={message} onChange={e => setMessage(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && !e.shiftKey && canSend && (e.preventDefault(), handleSend())}
                   placeholder={pendingFile ? 'Add a caption (optional)...' : `Message ${getConvoName(activeConvo)}...`}
-                  className="flex-1 bg-transparent text-sm outline-none text-black placeholder:text-white placeholder:opacity-90"
+                  className="flex-1 bg-transparent text-sm outline-none text-gray-900 placeholder:text-gray-400"
                 />
                 <button
                   type="button"

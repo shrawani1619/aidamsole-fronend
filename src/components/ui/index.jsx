@@ -43,6 +43,18 @@ export const Modal = ({ open, onClose, title, children, size = 'md', footer }) =
   if (!open) return null;
   const sizeClass = size === 'xl' ? 'modal-xl' : size === 'lg' ? 'modal-lg' : 'modal';
   const overlayMouseDownRef = useRef(false);
+  const [outsideClickBlink, setOutsideClickBlink] = useState(false);
+  const blinkTimerRef = useRef(null);
+
+  const triggerBlink = () => {
+    if (blinkTimerRef.current) clearTimeout(blinkTimerRef.current);
+    setOutsideClickBlink(true);
+    blinkTimerRef.current = setTimeout(() => setOutsideClickBlink(false), 240);
+  };
+
+  useEffect(() => () => {
+    if (blinkTimerRef.current) clearTimeout(blinkTimerRef.current);
+  }, []);
 
   const handleOverlayMouseDown = (e) => {
     overlayMouseDownRef.current = e.target === e.currentTarget;
@@ -56,7 +68,8 @@ export const Modal = ({ open, onClose, title, children, size = 'md', footer }) =
     const selection = window.getSelection?.();
     if (selection && !selection.isCollapsed) return;
 
-    onClose();
+    // Keep dialog open; show quick validation blink instead.
+    triggerBlink();
   };
 
   return (
@@ -65,7 +78,7 @@ export const Modal = ({ open, onClose, title, children, size = 'md', footer }) =
       onMouseDown={handleOverlayMouseDown}
       onClick={handleOverlayClick}
     >
-      <div className={sizeClass}>
+      <div className={`${sizeClass} transition-all ${outsideClickBlink ? 'ring-2 ring-red-300 border-red-300' : ''}`}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <h2 className="text-base font-semibold text-gray-900">{title}</h2>
           <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
