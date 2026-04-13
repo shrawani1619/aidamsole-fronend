@@ -31,7 +31,9 @@ function ClientForm({ onClose, existing }) {
     name: existing?.name || '', company: existing?.company || '', email: existing?.email || '',
     phone: phoneFieldValue(existing?.phone), website: existing?.website || '', industry: existing?.industry || '',
     status: existing?.status || 'lead', contractValue: existing?.contractValue || '',
-    assignedAM: existing?.assignedAM?._id || '', notes: existing?.notes || '',
+    assignedAM: existing?.assignedAM?._id || '',
+    projectManager: existing?.projectManager?._id || '',
+    notes: existing?.notes || '',
     services: existing?.services || [], assignedDepartments: existing?.assignedDepartments?.map(d => d._id) || [],
     renewalDate: existing?.renewalDate ? existing.renewalDate.slice(0, 10) : '',
     contractStart: existing?.contractStart ? existing.contractStart.slice(0, 10) : '',
@@ -43,7 +45,13 @@ function ClientForm({ onClose, existing }) {
   const mutation = useMutation({
     mutationFn: (data) => {
       const payload = { ...data, phone: phoneToApi(data.phone) };
-      if (!isAdmin) delete payload.contractValue;
+      if (!isAdmin) {
+        delete payload.contractValue;
+        if (existing) {
+          delete payload.assignedAM;
+          delete payload.projectManager;
+        }
+      }
       return existing ? clientsApi.update(existing._id, payload) : clientsApi.create(payload);
     },
     onSuccess: () => { toast.success(existing ? 'Client updated' : 'Client created'); qc.invalidateQueries(['clients']); onClose(); }
@@ -81,8 +89,12 @@ function ClientForm({ onClose, existing }) {
         <Input label="Contract Start" type="date" value={form.contractStart} onChange={e => set('contractStart', e.target.value)} />
         <Input label="Renewal Date" type="date" value={form.renewalDate} onChange={e => set('renewalDate', e.target.value)} />
       </div>
-      <Select label="Assigned Account Manager" value={form.assignedAM} onChange={e => set('assignedAM', e.target.value)}
-        options={[{ value: '', label: 'Select AM...' }, ...users.map(u => ({ value: u._id, label: u.name }))]} />
+      <div className="grid grid-cols-2 gap-4">
+        <Select label="Assigned Account Manager" value={form.assignedAM} onChange={e => set('assignedAM', e.target.value)}
+          options={[{ value: '', label: 'Select AM...' }, ...users.map(u => ({ value: u._id, label: u.name }))]} />
+        <Select label="Project Manager" value={form.projectManager} onChange={e => set('projectManager', e.target.value)}
+          options={[{ value: '', label: 'None' }, ...users.map(u => ({ value: u._id, label: u.name }))]} />
+      </div>
       <div>
         <label className="label">Services</label>
         <div className="flex flex-wrap gap-2 mt-1">
@@ -188,6 +200,7 @@ export default function ClientsPage() {
               <th>Client</th>
               <th>Services</th>
               <th>AM</th>
+              <th>PM</th>
               <th>Health</th>
               {isAdmin && <th>Value</th>}
               <th>Renewal</th>
@@ -197,7 +210,7 @@ export default function ClientsPage() {
           </thead>
           <tbody>
             {clients.length === 0 ? (
-              <tr><td colSpan={isAdmin ? 8 : 7}><EmptyState icon={Users} title="No clients found" description="Adjust filters or add your first client" /></td></tr>
+              <tr><td colSpan={isAdmin ? 9 : 8}><EmptyState icon={Users} title="No clients found" description="Adjust filters or add your first client" /></td></tr>
             ) : clients.map(client => {
               const days = daysUntil(client.renewalDate);
               return (
@@ -226,6 +239,14 @@ export default function ClientsPage() {
                       <div className="flex items-center gap-1.5">
                         <Avatar user={client.assignedAM} size="xs" />
                         <span className="text-xs text-gray-600">{client.assignedAM.name?.split(' ')[0]}</span>
+                      </div>
+                    ) : <span className="text-xs text-gray-400">—</span>}
+                  </td>
+                  <td>
+                    {client.projectManager ? (
+                      <div className="flex items-center gap-1.5">
+                        <Avatar user={client.projectManager} size="xs" />
+                        <span className="text-xs text-gray-600">{client.projectManager.name?.split(' ')[0]}</span>
                       </div>
                     ) : <span className="text-xs text-gray-400">—</span>}
                   </td>

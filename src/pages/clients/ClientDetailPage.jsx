@@ -8,6 +8,7 @@ import {
   Globe,
   Calendar,
   User,
+  UserCog,
   Briefcase,
   Wallet,
   Layers,
@@ -156,6 +157,16 @@ export default function ClientDetailPage() {
                 <div className="flex items-center gap-2">
                   <Avatar user={client.assignedAM} size="xs" />
                   <span>{client.assignedAM.name}</span>
+                </div>
+              ) : (
+                '—'
+              )}
+            </Field>
+            <Field label="Project manager" icon={UserCog}>
+              {client.projectManager ? (
+                <div className="flex items-center gap-2">
+                  <Avatar user={client.projectManager} size="xs" />
+                  <span>{client.projectManager.name}</span>
                 </div>
               ) : (
                 '—'
