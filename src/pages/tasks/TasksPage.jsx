@@ -50,6 +50,7 @@ function mapExistingSubtask(s) {
     clientId: s.clientId?._id || s.clientId || '',
     departmentId: s.departmentId?._id || s.departmentId || '',
     assigneeId: s.assigneeId?._id || s.assigneeId || '',
+    assigneeIds: s.assigneeIds?.map((a) => a?._id || a).filter(Boolean) || [],
     reviewerId: s.reviewerId?._id || s.reviewerId || '',
     status: s.status || 'todo',
     priority: s.priority || 'medium',
@@ -67,6 +68,7 @@ function defaultSubtaskFromParent(form) {
     clientId: form.clientId || '',
     departmentId: form.departmentId || '',
     assigneeId: '',
+    assigneeIds: [],
     reviewerId: '',
     status: 'todo',
     priority: 'medium',
@@ -100,7 +102,8 @@ function buildTaskPayload(data) {
     projectId: data.projectId,
     clientId: data.clientId,
     departmentId: data.departmentId,
-    assigneeId: data.assigneeId || undefined,
+    assigneeIds: (data.assigneeIds || []).filter(Boolean),
+    assigneeId: (data.assigneeIds || []).filter(Boolean)[0] || data.assigneeId || undefined,
     reviewerIds: (data.reviewerIds || []).filter(Boolean),
     status: data.status,
     priority: data.priority,
@@ -183,7 +186,11 @@ export function TaskForm({ onClose, existing, defaultProjectId }) {
     projectId: existing?.projectId?._id || defaultProjectId || '',
     clientId: existing?.clientId?._id || selectedProject?.clientId?._id || '',
     departmentId: existing?.departmentId?._id || selectedProject?.departmentId?._id || '',
-    assigneeId: existing?.assigneeId?._id || '', reviewerIds: initialReviewerIds,
+    assigneeIds: existing?.assigneeIds?.length
+      ? existing.assigneeIds.map((a) => a._id || a).filter(Boolean)
+      : (existing?.assigneeId?._id ? [existing.assigneeId._id] : []),
+    assigneeId: existing?.assigneeId?._id || '',
+    reviewerIds: initialReviewerIds,
     status: existing?.status || 'todo', priority: existing?.priority || 'medium',
     dueDate: existing?.dueDate ? existing.dueDate.slice(0, 10) : '',
     estimatedHours: existing?.estimatedHours || '',
@@ -198,11 +205,12 @@ export function TaskForm({ onClose, existing, defaultProjectId }) {
     if (proj) { set('clientId', proj.clientId?._id || ''); set('departmentId', proj.departmentId?._id || ''); }
   };
 
-  const handleAssigneeChange = (assigneeId) => {
+  const handleAssigneeChange = (assigneeIds) => {
     setForm((p) => ({
       ...p,
-      assigneeId,
-      reviewerIds: p.reviewerIds.filter((id) => id !== assigneeId)
+      assigneeIds,
+      assigneeId: assigneeIds[0] || '',
+      reviewerIds: p.reviewerIds.filter((id) => !assigneeIds.includes(id))
     }));
   };
 
@@ -245,8 +253,14 @@ export function TaskForm({ onClose, existing, defaultProjectId }) {
           options={[{ value: '', label: 'Select dept...' }, ...departments.map(d => ({ value: d._id, label: d.name }))]} />
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <Select label="Assignee" value={form.assigneeId} onChange={e => handleAssigneeChange(e.target.value)}
-          options={[{ value: '', label: 'Unassigned' }, ...users.map(u => ({ value: u._id, label: u.name }))]} />
+        <CheckboxMultiSelect
+          label="Assignees"
+          placeholder="Select assignees…"
+          emptyMessage="No users available"
+          value={form.assigneeIds}
+          onChange={handleAssigneeChange}
+          options={users.map((u) => ({ value: u._id, label: u.name }))}
+        />
         <CheckboxMultiSelect
           label="Reviewers (Two-Eye)"
           placeholder="Select reviewers…"
@@ -254,7 +268,7 @@ export function TaskForm({ onClose, existing, defaultProjectId }) {
           value={form.reviewerIds}
           onChange={(next) => set('reviewerIds', next)}
           options={users
-            .filter((u) => !form.assigneeId || u._id !== form.assigneeId)
+            .filter((u) => !(form.assigneeIds || []).includes(u._id))
             .map((u) => ({ value: u._id, label: u.name }))}
         />
       </div>

@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
 import AppLayout from './components/layout/AppLayout';
-import NotificationProvider from './components/NotificationProvider';
+import NotificationHandler from './context/NotificationHandler';
 
 import LoginPage from './pages/auth/LoginPage';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
@@ -70,9 +70,8 @@ export default function App() {
             element={
               <PrivateRoute>
                 <SocketProvider>
-                  <NotificationProvider>
-                    <AppLayout />
-                  </NotificationProvider>
+                  <NotificationHandler />
+                  <AppLayout />
                 </SocketProvider>
               </PrivateRoute>
             }
