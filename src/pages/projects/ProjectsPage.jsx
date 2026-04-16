@@ -22,7 +22,11 @@ const SERVICE_OPTS = ['SEO', 'Organic Marketing', 'Meta Ads', 'Google Ads', 'Soc
 
 function normalizeServicesFromProject(s) {
   if (Array.isArray(s) && s.length) return s;
-  if (typeof s === 'string' && s) return [s];
+  if (typeof s === 'string' && s) {
+    // Backward compatibility: some legacy rows may store CSV like "SEO, Meta Ads"
+    const parts = s.split(',').map((x) => x.trim()).filter(Boolean);
+    return parts.length ? parts : [s];
+  }
   return [];
 }
 
@@ -44,6 +48,12 @@ function projectStatusLabel(status) {
 function ProjectForm({ onClose, existing }) {
   const { canManage } = useAuth();
   const qc = useQueryClient();
+  const isEdit = !!existing?._id;
+  const { data: projectData, isLoading: projectLoading } = useQuery({
+    queryKey: ['project', existing?._id],
+    queryFn: () => projectsApi.get(existing._id).then((r) => r.data),
+    enabled: isEdit,
+  });
   const { data: cData } = useQuery({ queryKey: ['clients-all'], queryFn: () => clientsApi.list({ limit: 100 }).then(r => r.data) });
   const { data: dData } = useQuery({ queryKey: ['departments'], queryFn: () => departmentsApi.list().then(r => r.data) });
   const { data: uData } = useQuery({ queryKey: ['users'], queryFn: () => usersApi.list().then(r => r.data) });
@@ -56,16 +66,34 @@ function ProjectForm({ onClose, existing }) {
   const serviceTriggerRef = useRef(null);
   const servicePanelRef = useRef(null);
 
-  const [form, setForm] = useState({
-    title: existing?.title || '', description: existing?.description || '',
-    clientId: existing?.clientId?._id || '', departmentId: existing?.departmentId?._id || '',
-    managerId: existing?.managerId?._id || '', service: normalizeServicesFromProject(existing?.service),
-    serviceOtherDetail: existing?.serviceOtherDetail || '',
-    status: existing?.status || 'planning', priority: existing?.priority || 'medium',
-    startDate: existing?.startDate ? existing.startDate.slice(0, 10) : '',
-    dueDate: existing?.dueDate ? existing.dueDate.slice(0, 10) : '',
-    budget: existing?.budget || '', team: existing?.team?.map(t => t._id) || []
+  const toFormState = (p) => ({
+    title: p?.title || '',
+    description: p?.description || '',
+    clientId: p?.clientId?._id || p?.clientId || '',
+    departmentId: p?.departmentId?._id || p?.departmentId || '',
+    managerId: p?.managerId?._id || p?.managerId || '',
+    service: normalizeServicesFromProject(p?.service),
+    serviceOtherDetail: p?.serviceOtherDetail || '',
+    status: p?.status || 'planning',
+    priority: p?.priority || 'medium',
+    startDate: p?.startDate ? String(p.startDate).slice(0, 10) : '',
+    dueDate: p?.dueDate ? String(p.dueDate).slice(0, 10) : '',
+    budget: p?.budget || '',
+    progress: p?.progress != null ? String(p.progress) : '0',
+    team: p?.team?.map((t) => t._id || t).filter(Boolean) || [],
   });
+
+  const [form, setForm] = useState(() => toFormState(existing));
+
+  useEffect(() => {
+    if (!isEdit) {
+      setForm(toFormState(existing));
+      return;
+    }
+    if (projectData?.project) {
+      setForm(toFormState(projectData.project));
+    }
+  }, [isEdit, projectData, existing?._id]);
 
   const updateServiceMenuPos = () => {
     const el = serviceTriggerRef.current;
@@ -103,7 +131,7 @@ function ProjectForm({ onClose, existing }) {
 
   // New project: when client is chosen and budget is still empty, prefill from that client’s monthly contract (MCV).
   useEffect(() => {
-    if (existing) return;
+    if (isEdit) return;
     if (!form.clientId || !clients.length) return;
     const c = clients.find((x) => String(x._id) === String(form.clientId));
     if (!c || c.contractValue == null || c.contractValue === '') return;
@@ -112,7 +140,7 @@ function ProjectForm({ onClose, existing }) {
       if (!unset) return p;
       return { ...p, budget: c.contractValue };
     });
-  }, [form.clientId, existing, clients]);
+  }, [form.clientId, isEdit, clients]);
 
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
   const toggleTeam = (id) => set('team', form.team.includes(id) ? form.team.filter(i => i !== id) : [...form.team, id]);
@@ -129,8 +157,8 @@ function ProjectForm({ onClose, existing }) {
   };
 
   const mutation = useMutation({
-    mutationFn: (data) => existing ? projectsApi.update(existing._id, data) : projectsApi.create(data),
-    onSuccess: () => { toast.success(existing ? 'Project updated' : 'Project created'); qc.invalidateQueries(['projects']); onClose(); }
+    mutationFn: (data) => (isEdit ? projectsApi.update(existing._id, data) : projectsApi.create(data)),
+    onSuccess: () => { toast.success(isEdit ? 'Project updated' : 'Project created'); qc.invalidateQueries(['projects']); onClose(); }
   });
 
   const submit = () => {
@@ -140,6 +168,11 @@ function ProjectForm({ onClose, existing }) {
     }
     if (form.service.includes('Other') && !form.serviceOtherDetail?.trim()) {
       toast.error('Please describe the other service');
+      return;
+    }
+    const progressNum = Number(form.progress);
+    if (!Number.isFinite(progressNum) || progressNum < 0 || progressNum > 100) {
+      toast.error('Project progress must be between 0 and 100');
       return;
     }
     mutation.mutate(form);
@@ -241,15 +274,21 @@ function ProjectForm({ onClose, existing }) {
         <Select label="Priority" value={form.priority} onChange={e => set('priority', e.target.value)}
           options={PRIORITY_OPTS.slice(1).map(o => ({ value: o.value, label: o.label }))} />
       </div>
-      <div className={`grid gap-4 ${canManage ? 'grid-cols-3' : 'grid-cols-2'}`}>
+      <div className={`grid gap-4 ${canManage ? 'grid-cols-4' : 'grid-cols-3'}`}>
         <Input label="Start Date" type="date" value={form.startDate} onChange={e => set('startDate', e.target.value)} />
         <Input label="Due Date" type="date" value={form.dueDate} onChange={e => set('dueDate', e.target.value)} />
+        <Input
+          label="Progress (%)"
+          type="number"
+          min="0"
+          max="100"
+          step="1"
+          value={form.progress}
+          onChange={e => set('progress', e.target.value)}
+        />
         {canManage && (
           <div>
             <Input label="Project budget (₹)" type="number" value={form.budget} onChange={e => set('budget', e.target.value)} />
-            <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
-              Planned spend for this project (vs client retainer). Pre-filled from the client’s monthly contract when you pick a client—edit if this engagement uses a different slice.
-            </p>
           </div>
         )}
       </div>
@@ -266,8 +305,8 @@ function ProjectForm({ onClose, existing }) {
       </div>
       <div className="flex justify-end gap-2 pt-2">
         <button className="btn-secondary" onClick={onClose}>Cancel</button>
-        <button className="btn-primary" onClick={submit} disabled={mutation.isPending}>
-          {mutation.isPending ? 'Saving...' : existing ? 'Update' : 'Create Project'}
+        <button className="btn-primary" onClick={submit} disabled={mutation.isPending || projectLoading}>
+          {mutation.isPending ? 'Saving...' : isEdit ? 'Update' : 'Create Project'}
         </button>
       </div>
     </div>

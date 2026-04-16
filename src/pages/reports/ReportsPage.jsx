@@ -9,7 +9,7 @@ import {
 import { reportsApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { PageLoader, StatCard, Tabs, Avatar } from '../../components/ui';
-import { formatINR, formatDate, healthBg, slugToLabel } from '../../utils/helpers';
+import { formatINR, formatINRCompact, formatDate, healthBg, slugToLabel } from '../../utils/helpers';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Title, Tooltip, Legend);
 
@@ -182,7 +182,7 @@ export default function ReportsPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <StatCard label="Revenue Collected" value={formatINR(finData.summary.totalRevenue)} color="text-green-600" icon={TrendingUp} />
                 {showMrrOnFinancial && (
-                  <StatCard label="MRR" value={formatINR(finData.summary.mrr)} icon={BarChart2} />
+                  <StatCard label="MRR" value={formatINRCompact(finData.summary.mrr)} icon={BarChart2} />
                 )}
                 <StatCard label="Outstanding"       value={formatINR(finData.summary.outstanding)} color="text-amber-600" />
                 <StatCard label="Overdue"            value={formatINR(finData.summary.overdueAmount)} color="text-red-600" />
@@ -255,23 +255,49 @@ export default function ReportsPage() {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
                 <div className="card">
                   <h3 className="text-sm font-semibold mb-4">Health Distribution</h3>
-                  <div className="h-44 flex items-center justify-center">
-                    <Doughnut
-                      data={{
-                        labels: ['Green', 'Amber', 'Red'],
-                        datasets: [{
-                          data: [
-                            clientData.summary.healthDistribution.green,
-                            clientData.summary.healthDistribution.amber,
-                            clientData.summary.healthDistribution.red
-                          ],
-                          backgroundColor: [COLORS.green, COLORS.amber, COLORS.red],
-                          borderWidth: 0
-                        }]
-                      }}
-                      options={{ maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }}
-                    />
-                  </div>
+                  {(() => {
+                    const green = clientData.summary.healthDistribution.green || 0;
+                    const amber = clientData.summary.healthDistribution.amber || 0;
+                    const red = clientData.summary.healthDistribution.red || 0;
+                    const total = Math.max(1, Number(clientData.summary.totalClients) || (green + amber + red));
+                    return (
+                      <>
+                        <div className="h-44 flex items-center justify-center">
+                          <Doughnut
+                            data={{
+                              labels: ['Green', 'Amber', 'Red'],
+                              datasets: [{
+                                data: [
+                                  clientData.summary.healthDistribution.green,
+                                  clientData.summary.healthDistribution.amber,
+                                  clientData.summary.healthDistribution.red
+                                ],
+                                backgroundColor: [COLORS.green, COLORS.amber, COLORS.red],
+                                borderWidth: 0
+                              }]
+                            }}
+                            options={{ maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }}
+                          />
+                        </div>
+                        <div className="mt-3 grid grid-cols-3 gap-2">
+                          {[
+                            { label: 'Green', count: green, color: 'bg-green-500' },
+                            { label: 'Amber', count: amber, color: 'bg-amber-500' },
+                            { label: 'Red', count: red, color: 'bg-red-500' },
+                          ].map((item) => (
+                            <div key={item.label} className="rounded-lg bg-surface-secondary px-2 py-1.5 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <span className={`w-2 h-2 rounded-full ${item.color}`} />
+                                <span className="text-[11px] text-gray-500">{item.label}</span>
+                              </div>
+                              <p className="text-sm font-semibold text-gray-800">{item.count}</p>
+                              <p className="text-[10px] text-gray-400">{Math.round((item.count / total) * 100)}%</p>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
 
                 <div className="card lg:col-span-2">
@@ -368,7 +394,7 @@ export default function ReportsPage() {
                       data={{
                         labels: teamData.departments.map(d => d.dept?.name),
                         datasets: [
-                          { label: 'Done',    data: teamData.departments.map(d => d.done),    backgroundColor: COLORS.green + 'cc', borderRadius: 4 },
+                          { label: 'Done',    data: teamData.departments.map(d => d.done),    backgroundColor: '#00C853CC', borderRadius: 4 },
                           { label: 'Delayed', data: teamData.departments.map(d => d.delayed), backgroundColor: COLORS.red   + 'cc', borderRadius: 4 }
                         ]
                       }}
@@ -396,7 +422,17 @@ export default function ReportsPage() {
                     <Doughnut
                       data={{
                         labels: opsData.projectsByStatus.map(s => slugToLabel(s.status)),
-                        datasets: [{ data: opsData.projectsByStatus.map(s => s.count), backgroundColor: Object.values(COLORS), borderWidth: 0 }]
+                        datasets: [{
+                          data: opsData.projectsByStatus.map(s => s.count),
+                          backgroundColor: [
+                            COLORS.navy,  // planning
+                            '#22C55E',    // active (fresh green)
+                            COLORS.red,   // on hold
+                            COLORS.amber, // completed
+                            COLORS.blue   // cancelled
+                          ],
+                          borderWidth: 0
+                        }]
                       }}
                       options={{ maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }}
                     />

@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { financeApi, clientsApi, projectsApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Modal, Input, Select, Textarea, PageLoader, StatCard, EmptyState, ConfirmDialog } from '../../components/ui';
-import { formatINR, formatDate, statusColors, slugToLabel } from '../../utils/helpers';
+import { formatINR, formatINRCompact, formatDate, statusColors, slugToLabel } from '../../utils/helpers';
 
 const STATUS_OPTS = [
   { value: '', label: 'All' }, { value: 'draft', label: 'Draft' }, { value: 'sent', label: 'Sent' },
@@ -181,6 +181,7 @@ export default function FinancePage() {
   const { canManage } = useAuth();
   const qc = useQueryClient();
   const [status, setStatus]           = useState('');
+  const [autoRenewalOnly, setAutoRenewalOnly] = useState(false);
   const [modalOpen, setModalOpen]     = useState(false);
   const [editInvoice, setEditInvoice] = useState(null);
   const [payModal, setPayModal]       = useState(null);
@@ -193,8 +194,11 @@ export default function FinancePage() {
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['invoices', { status }],
-    queryFn: () => financeApi.list({ status, limit: 50 }).then(r => r.data),
+    queryKey: ['invoices', { status, autoRenewalOnly }],
+    queryFn: () =>
+      financeApi
+        .list({ status, autoRenewal: autoRenewalOnly || undefined, limit: 50 })
+        .then(r => r.data),
   });
 
   const deleteMutation = useMutation({
@@ -223,7 +227,7 @@ export default function FinancePage() {
       {/* Summary cards */}
       {summaryData && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard label="Monthly Revenue" value={formatINR(summaryData.mrr)} color="text-green-600"
+          <StatCard label="Monthly Revenue" value={formatINRCompact(summaryData.mrr)} color="text-green-600"
             icon={TrendingUp} trend={summaryData.mrrGrowth} />
           <StatCard label="Outstanding" value={formatINR(summaryData.outstanding)} color="text-amber-600"
             icon={AlertCircle} sub={`${summaryData.outstandingCount} invoices pending`} />
@@ -244,6 +248,15 @@ export default function FinancePage() {
           </button>
         ))}
       </div>
+      <label className="inline-flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={autoRenewalOnly}
+          onChange={(e) => setAutoRenewalOnly(e.target.checked)}
+          className="rounded text-brand-navy"
+        />
+        Auto-renewal invoices only
+      </label>
 
       {/* Invoice table */}
       <div className="table-container">
@@ -263,12 +276,23 @@ export default function FinancePage() {
           <tbody>
             {invoices.length === 0 ? (
               <tr><td colSpan={8}>
-                <EmptyState icon={IndianRupee} title="No invoices" description="Create your first invoice to get started" />
+                <EmptyState
+                  icon={IndianRupee}
+                  title={autoRenewalOnly ? 'No auto-renewal invoices' : 'No invoices'}
+                  description={
+                    autoRenewalOnly
+                      ? 'No invoices were auto-generated yet. Auto invoices are created 8 days before renewal date.'
+                      : 'Create your first invoice to get started'
+                  }
+                />
               </td></tr>
             ) : invoices.map(inv => (
               <tr key={inv._id}>
                 <td>
                   <p className="text-sm font-bold text-brand-navy">{inv.invoiceNumber}</p>
+                  {inv.source === 'renewal_t_minus_8' && (
+                    <p className="text-[11px] text-emerald-700 font-medium mt-0.5">Auto renewal</p>
+                  )}
                 </td>
                 <td>
                   <p className="text-sm font-medium text-gray-900">{inv.clientId?.company || '—'}</p>
@@ -304,9 +328,14 @@ export default function FinancePage() {
                     )}
                     <button onClick={() => { setEditInvoice(inv); setModalOpen(true); }}
                       className="btn-secondary py-1 px-2 text-xs">Edit</button>
-                    {inv.status === 'draft' && (
-                      <button onClick={() => setDeleteTarget(inv)} className="btn-danger py-1 px-2 text-xs">Del</button>
-                    )}
+                    <button
+                      onClick={() => setDeleteTarget(inv)}
+                      disabled={inv.status === 'paid'}
+                      title={inv.status === 'paid' ? 'Paid invoices cannot be deleted' : 'Delete invoice'}
+                      className="btn-danger py-1 px-2 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Delete
+                    </button>
                   </div>
                 </td>
               </tr>

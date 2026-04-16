@@ -15,6 +15,19 @@ export const formatINR = (amount) => {
   return '₹' + Number(amount).toLocaleString('en-IN');
 };
 
+export const formatINRCompact = (amount) => {
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return '₹0';
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+
+  if (abs >= 10000000) return `${sign}₹${(abs / 10000000).toFixed(abs >= 100000000 ? 0 : 1)}Cr`;
+  if (abs >= 1000000) return `${sign}₹${(abs / 1000000).toFixed(abs >= 10000000 ? 0 : 1)}M`;
+  if (abs >= 100000) return `${sign}₹${(abs / 100000).toFixed(abs >= 1000000 ? 0 : 1)}L`;
+  if (abs >= 1000) return `${sign}₹${(abs / 1000).toFixed(abs >= 100000 ? 0 : 1)}K`;
+  return `${sign}₹${abs.toLocaleString('en-IN')}`;
+};
+
 export const formatNumber = (n) => Number(n).toLocaleString('en-IN');
 
 export const getInitials = (name = '') =>

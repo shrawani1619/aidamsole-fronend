@@ -5,7 +5,7 @@ import { Users, FolderKanban, CheckSquare, IndianRupee, TrendingUp, AlertTriangl
 import { dashboardApi, reportsApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { StatCard, PageLoader, Avatar, ProgressBar } from '../../components/ui';
-import { formatINR, formatDate, healthBg, statusColors, slugToLabel, isOverdue } from '../../utils/helpers';
+import { formatINR, formatINRCompact, formatDate, healthBg, statusColors, slugToLabel, isOverdue } from '../../utils/helpers';
 
 export default function Dashboard() {
   const { user, canModule, canViewField } = useAuth();
@@ -56,7 +56,7 @@ export default function Dashboard() {
       {hasInsightKpis && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {'mrr' in kpis && canViewField('dashboard', 'mrr') && (
-            <StatCard label="MRR" value={formatINR(kpis.mrr)} icon={IndianRupee} color="text-green-600"
+            <StatCard label="MRR" value={formatINRCompact(kpis.mrr)} icon={IndianRupee} color="text-green-600"
               sub={`${kpis.revenueGrowth >= 0 ? '+' : ''}${kpis.revenueGrowth}% vs last month`}
               trend={kpis.revenueGrowth} />
           )}

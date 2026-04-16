@@ -37,14 +37,30 @@ function ClientForm({ onClose, existing }) {
     services: existing?.services || [], assignedDepartments: existing?.assignedDepartments?.map(d => d._id) || [],
     renewalDate: existing?.renewalDate ? existing.renewalDate.slice(0, 10) : '',
     contractStart: existing?.contractStart ? existing.contractStart.slice(0, 10) : '',
+    healthScoreOverall: existing?.healthScore?.overall != null ? String(existing.healthScore.overall) : '',
   });
 
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  const setHealthScore = (raw) => {
+    if (raw === '') return set('healthScoreOverall', '');
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return;
+    const clamped = Math.min(10, Math.max(0, n));
+    set('healthScoreOverall', String(clamped));
+  };
   const toggleService = (svc) => set('services', form.services.includes(svc) ? form.services.filter(s => s !== svc) : [...form.services, svc]);
 
   const mutation = useMutation({
     mutationFn: (data) => {
       const payload = { ...data, phone: phoneToApi(data.phone) };
+      if (payload.healthScoreOverall !== '' && payload.healthScoreOverall != null) {
+        payload.healthScoreOverall = Number(payload.healthScoreOverall);
+      } else {
+        delete payload.healthScoreOverall;
+      }
+      if (payload.healthScoreOverall != null && (!Number.isFinite(payload.healthScoreOverall) || payload.healthScoreOverall > 10 || payload.healthScoreOverall < 0)) {
+        throw new Error('Health score must be between 0 and 10');
+      }
       if (!isAdmin) {
         delete payload.contractValue;
         if (existing) {
@@ -54,6 +70,7 @@ function ClientForm({ onClose, existing }) {
       }
       return existing ? clientsApi.update(existing._id, payload) : clientsApi.create(payload);
     },
+    onError: (err) => toast.error(err?.response?.data?.message || err?.message || 'Could not save client'),
     onSuccess: () => { toast.success(existing ? 'Client updated' : 'Client created'); qc.invalidateQueries(['clients']); onClose(); }
   });
 
@@ -88,6 +105,21 @@ function ClientForm({ onClose, existing }) {
       <div className="grid grid-cols-2 gap-4">
         <Input label="Contract Start" type="date" value={form.contractStart} onChange={e => set('contractStart', e.target.value)} />
         <Input label="Renewal Date" type="date" value={form.renewalDate} onChange={e => set('renewalDate', e.target.value)} />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <Input
+          label="Health Score (0–10)"
+          type="number"
+          min="0"
+          max="10"
+          step="0.1"
+          value={form.healthScoreOverall}
+          onChange={e => setHealthScore(e.target.value)}
+          placeholder="8.5"
+        />
+        <div className="text-xs text-gray-500 flex items-end pb-2">
+          Manual health score used in client health badge and health reports.
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <Select label="Assigned Account Manager" value={form.assignedAM} onChange={e => set('assignedAM', e.target.value)}

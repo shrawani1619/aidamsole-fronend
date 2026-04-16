@@ -8,6 +8,22 @@ import { useAuth } from '../../context/AuthContext';
 import { PageLoader, EmptyState, ProgressBar, ConfirmDialog } from '../../components/ui';
 import { formatDate, formatINR, isOverdue, slugToLabel } from '../../utils/helpers';
 
+function normalizeServicesFromProject(s) {
+  if (Array.isArray(s) && s.length) return s;
+  if (typeof s === 'string' && s) {
+    const parts = s.split(',').map((x) => x.trim()).filter(Boolean);
+    return parts.length ? parts : [s];
+  }
+  return [];
+}
+
+function formatServiceLabel(service, serviceOtherDetail) {
+  if (service === 'Other' && typeof serviceOtherDetail === 'string' && serviceOtherDetail.trim()) {
+    return `Other (${serviceOtherDetail.trim()})`;
+  }
+  return service;
+}
+
 export default function ProjectDetailPage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
@@ -50,6 +66,7 @@ export default function ProjectDetailPage() {
 
   const project = data.project;
   const overdue = project.dueDate && project.status !== 'completed' && isOverdue(project.dueDate);
+  const services = normalizeServicesFromProject(project.service);
 
   return (
     <div className="space-y-5 animate-fade-in max-w-4xl">
@@ -124,6 +141,21 @@ export default function ProjectDetailPage() {
             </div>
           </div>
         )}
+
+        <div>
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Services</h3>
+          {services.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {services.map((svc) => (
+                <span key={svc} className="badge-blue text-xs">
+                  {formatServiceLabel(svc, project.serviceOtherDetail)}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400">No services selected</p>
+          )}
+        </div>
       </div>
 
       <ConfirmDialog
