@@ -25,6 +25,7 @@ import HistoryPage from './pages/history/HistoryPage';
 import AdminsPage from './pages/admins/AdminsPage';
 import PermissionsPage from './pages/permissions/PermissionsPage';
 import ProfilePage from './pages/profile/ProfilePage';
+import NotificationsPage from './pages/notifications/NotificationsPage';
 import ModuleGate from './components/ModuleGate';
 import { Spinner } from './components/ui';
 
@@ -94,6 +95,7 @@ export default function App() {
             <Route path="finance"     element={<ModuleGate module="finance"><FinancePage /></ModuleGate>} />
             <Route path="chat"        element={<ModuleGate module="chat"><ChatPage /></ModuleGate>} />
             <Route path="profile"     element={<ProfilePage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
             <Route path="settings"    element={<Navigate to="/profile" replace />} />
           </Route>
 

@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
 import toast from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import useNotificationSound from '../hooks/useNotificationSound';
 import { useSocket } from './SocketContext';
 
@@ -16,43 +18,56 @@ function formatNotificationMessage(notification) {
 export default function NotificationHandler() {
   const { play } = useNotificationSound();
   const { socket } = useSocket();
+  const navigate = useNavigate();
+  const qc = useQueryClient();
 
   useEffect(() => {
-    if (!socket) {
-      console.log('[Notification] socket not ready yet');
-      return undefined;
-    }
-
-    console.log('[Notification] listeners attached', {
-      socketId: socket.id,
-      connected: socket.connected,
-    });
+    if (!socket) return undefined;
 
     const onNotification = (eventName) => (notification = {}) => {
-      console.log('[Notification] event received', {
-        eventName,
-        id: notification?.id,
-        type: notification?.type,
-        title: notification?.title,
-        silent: notification?.silent,
-        timestamp: notification?.timestamp,
-      });
-
-      const toastId = notification?.id ? `notification-${notification.id}` : undefined;
-      toast.success(formatNotificationMessage(notification), { id: toastId });
-
-      if (notification.silent === true) {
-        console.log('[Notification] sound skipped because silent=true', {
-          eventName,
-          id: notification?.id,
-        });
+      if (notification?.silent || notification?.source === 'chat') {
+        qc.invalidateQueries({ queryKey: ['notifications'] });
         return;
       }
 
-      console.log('[Notification] triggering sound play', {
-        eventName,
-        id: notification?.id,
-      });
+      qc.invalidateQueries({ queryKey: ['notifications'] });
+
+      const toastId = notification?.id ? `notification-${notification.id}` : undefined;
+      const link = notification?.link;
+
+      toast.custom(
+        (t) => (
+          <div className="bg-white rounded-lg shadow-lg border border-gray-100 px-4 py-3 max-w-sm flex flex-col gap-2 text-left">
+            <p className="text-sm text-gray-900">{formatNotificationMessage(notification)}</p>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                className="text-xs font-medium text-brand-navy hover:underline"
+                onClick={() => {
+                  toast.dismiss(t);
+                  navigate('/notifications');
+                }}
+              >
+                View all
+              </button>
+              {link ? (
+                <button
+                  type="button"
+                  className="text-xs font-medium text-gray-700 hover:underline"
+                  onClick={() => {
+                    toast.dismiss(t);
+                    navigate(link);
+                  }}
+                >
+                  Open
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ),
+        { id: toastId, duration: 8000 }
+      );
+
       void play();
     };
 
@@ -68,9 +83,8 @@ export default function NotificationHandler() {
       socket.off('notification:new', onNotificationNew);
       socket.off('new_notification', onNewNotification);
       socket.off('message:new', onMessageNew);
-      console.log('[Notification] listeners removed');
     };
-  }, [socket, play]);
+  }, [socket, play, navigate, qc]);
 
   return null;
 }

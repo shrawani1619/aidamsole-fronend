@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Plus, CheckSquare, Clock, Eye, ThumbsUp, MessageSquare, Archive } from 'lucide-react';
@@ -7,6 +7,7 @@ import { tasksApi, clientsApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Modal, Input, Select, Textarea, SearchInput, PageLoader, EmptyState, Avatar, ConfirmDialog, CheckboxMultiSelect } from '../../components/ui';
 import { formatDate, statusColors, priorityColors, slugToLabel, isOverdue, timeAgo } from '../../utils/helpers';
+import { getSocket, connectSocket } from '../../services/socket';
 
 export function isTaskReviewer(task, userId) {
   if (!task || !userId) return false;
@@ -15,6 +16,17 @@ export function isTaskReviewer(task, userId) {
   if (fromList.includes(uid)) return true;
   if (task.reviewerId && String(task.reviewerId._id || task.reviewerId) === uid) return true;
   return false;
+}
+
+/** Whether the logged-in user is an assignee and/or Two-Eye reviewer on this task */
+export function userRolesOnTask(task, userId) {
+  if (!task || !userId) return { isAssignee: false, isReviewer: false };
+  const uid = String(userId);
+  const isAssignee =
+    String(task.assigneeId?._id || task.assigneeId || '') === uid ||
+    (task.assigneeIds || []).some((a) => String(a?._id || a) === uid);
+  const isReviewer = isTaskReviewer(task, userId);
+  return { isAssignee, isReviewer };
 }
 
 const STATUSES = ['todo', 'in_progress', 'review', 'approved', 'done', 'blocked'];
@@ -376,7 +388,7 @@ function TaskCard({ task, onEdit, onApprove, onTrash, canTrash }) {
 }
 
 export default function TasksPage() {
-  const { canModule } = useAuth();
+  const { user, canModule } = useAuth();
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -390,7 +402,22 @@ export default function TasksPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['tasks', { search, filterStatus, filterPriority, delayed }],
     queryFn: () => tasksApi.list({ search, status: filterStatus, priority: filterPriority, delayed: delayed || undefined, limit: 100 }).then(r => r.data),
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
+
+  useEffect(() => {
+    const socket = getSocket() ?? connectSocket();
+    if (!socket) return undefined;
+    const refresh = () => qc.invalidateQueries({ queryKey: ['tasks'] });
+    socket.on('task:created', refresh);
+    socket.on('task:updated', refresh);
+    return () => {
+      socket.off('task:created', refresh);
+      socket.off('task:updated', refresh);
+    };
+  }, [qc]);
 
   const approveMutation = useMutation({
     mutationFn: (id) => tasksApi.twoEyeApprove(id),
@@ -465,7 +492,16 @@ export default function TasksPage() {
         <div className="table-container">
           <table className="table">
             <thead>
-              <tr><th>Task</th><th>Client</th><th>Assignee</th><th>Priority</th><th>Due Date</th><th>Status</th><th></th></tr>
+              <tr>
+                <th>Task</th>
+                <th>Client</th>
+                <th>Assignee</th>
+                <th>Your role</th>
+                <th className="whitespace-nowrap">Priority</th>
+                <th className="whitespace-nowrap">Due date</th>
+                <th className="whitespace-nowrap min-w-[7.5rem]">Status</th>
+                <th className="text-right whitespace-nowrap w-[1%] pl-2 pr-4">Actions</th>
+              </tr>
             </thead>
             <tbody>
               {tasks.map(task => (
@@ -482,27 +518,61 @@ export default function TasksPage() {
                   </td>
                   <td><span className="text-xs text-gray-600">{task.clientId?.company || '—'}</span></td>
                   <td>{task.assigneeId ? <div className="flex items-center gap-1.5"><Avatar user={task.assigneeId} size="xs" /><span className="text-xs">{task.assigneeId.name?.split(' ')[0]}</span></div> : '—'}</td>
-                  <td><span className={`text-xs ${priorityColors[task.priority] || 'badge-gray'}`}>{task.priority}</span></td>
                   <td>
+                    {(() => {
+                      const { isAssignee, isReviewer } = userRolesOnTask(task, user?._id);
+                      if (!isAssignee && !isReviewer) {
+                        return <span className="text-xs text-gray-400">—</span>;
+                      }
+                      return (
+                        <div className="flex flex-wrap gap-1">
+                          {isAssignee && (
+                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-100">Assignee</span>
+                          )}
+                          {isReviewer && (
+                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-100">Reviewer</span>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </td>
+                  <td className="align-middle whitespace-nowrap">
+                    <span className={priorityColors[task.priority] || 'badge-gray'}>{task.priority}</span>
+                  </td>
+                  <td className="align-middle whitespace-nowrap text-xs">
                     {task.dueDate ? (
-                      <span className={`text-xs ${isOverdue(task.dueDate) && !['done','approved'].includes(task.status) ? 'text-red-500 font-medium' : 'text-gray-500'}`}>
+                      <span className={isOverdue(task.dueDate) && !['done','approved'].includes(task.status) ? 'text-red-500 font-medium' : 'text-gray-500'}>
                         {formatDate(task.dueDate)}
                       </span>
                     ) : '—'}
                   </td>
-                  <td><span className={`text-xs ${statusColors[task.status] || 'badge-gray'}`}>{slugToLabel(task.status)}</span></td>
-                  <td>
-                    <div className="flex flex-wrap gap-1">
-                      <Link to={`/tasks/${task._id}`} className="btn-secondary py-1 px-2 text-xs">View</Link>
-                      <button type="button" onClick={() => { setEditTask(task); setModalOpen(true); }} className="btn-secondary py-1 px-2 text-xs">Edit</button>
+                  <td className="align-middle whitespace-nowrap">
+                    <span className={statusColors[task.status] || 'badge-gray'}>{slugToLabel(task.status)}</span>
+                  </td>
+                  <td className="align-middle text-right">
+                    <div className="inline-flex flex-nowrap items-center justify-end gap-1.5">
+                      <Link to={`/tasks/${task._id}`} className="btn-table">
+                        View
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditTask(task);
+                          setModalOpen(true);
+                        }}
+                        className="btn-table"
+                      >
+                        Edit
+                      </button>
                       {canTrashTask && (
                         <button
                           type="button"
                           onClick={() => setTaskTrashTarget(task)}
-                          className="btn-secondary py-1 px-2 text-xs text-amber-700 hover:bg-amber-50 inline-flex items-center gap-1"
+                          className="btn-table btn-table-amber"
                           title="Move to trash"
                         >
-                          <Archive size={12} /> Trash
+                          <Archive size={12} className="shrink-0" aria-hidden />
+                          Trash
                         </button>
                       )}
                     </div>

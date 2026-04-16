@@ -19,8 +19,8 @@ export default function Header({ title }) {
   const qc = useQueryClient();
 
   const { data, refetch } = useQuery({
-    queryKey: ['notifications'],
-    queryFn: () => notificationsApi.list({ unread: 'true' }).then(r => r.data),
+    queryKey: ['notifications', 'preview'],
+    queryFn: () => notificationsApi.list({ limit: 10 }).then((r) => r.data),
     refetchInterval: 30000,
   });
 
@@ -89,9 +89,20 @@ export default function Header({ title }) {
               </div>
               <div className="max-h-72 overflow-y-auto divide-y divide-gray-50">
                 {notifications.length === 0 ? (
-                  <div className="py-8 text-center text-sm text-gray-400">All caught up! 🎉</div>
+                  <div className="py-8 text-center text-sm text-gray-400">No notifications yet.</div>
                 ) : notifications.map(n => (
-                  <div key={n._id} className={`px-4 py-3 hover:bg-surface-secondary transition-colors ${!n.isRead ? 'bg-blue-50/50' : ''}`}>
+                  <button
+                    key={n._id}
+                    type="button"
+                    onClick={() => {
+                      if (!n.isRead) {
+                        notificationsApi.markRead(n._id).then(() => qc.invalidateQueries({ queryKey: ['notifications'] }));
+                      }
+                      if (n.link) navigate(n.link);
+                      setNotifOpen(false);
+                    }}
+                    className={`w-full text-left px-4 py-3 hover:bg-surface-secondary transition-colors ${!n.isRead ? 'bg-blue-50/50' : ''}`}
+                  >
                     <div className="flex gap-2.5">
                       <span className="text-base flex-shrink-0">{notifIcon(n.type)}</span>
                       <div className="min-w-0">
@@ -100,8 +111,17 @@ export default function Header({ title }) {
                         <p className="text-xs text-gray-400 mt-1">{timeAgo(n.createdAt)}</p>
                       </div>
                     </div>
-                  </div>
+                  </button>
                 ))}
+              </div>
+              <div className="px-3 py-2 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => { setNotifOpen(false); navigate('/notifications'); }}
+                  className="w-full text-center text-xs font-medium text-brand-navy hover:underline py-1"
+                >
+                  View all notifications
+                </button>
               </div>
             </div>
           )}
