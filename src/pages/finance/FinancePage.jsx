@@ -178,7 +178,7 @@ function MarkPaidModal({ invoice, onClose }) {
 
 export default function FinancePage() {
   // No role check — backend controls access. Super admin always sees everything.
-  const { canManage } = useAuth();
+  const { canModule } = useAuth();
   const qc = useQueryClient();
   const [status, setStatus]           = useState('');
   const [autoRenewalOnly, setAutoRenewalOnly] = useState(false);
@@ -217,7 +217,7 @@ export default function FinancePage() {
           <h2 className="page-title">Finance</h2>
           <p className="text-sm text-gray-500">{invoices.length} invoices</p>
         </div>
-        {canManage && (
+        {canModule('finance', 'create') && (
           <button className="btn-primary" onClick={() => { setEditInvoice(null); setModalOpen(true); }}>
             <Plus size={16} /> New Invoice
           </button>
@@ -320,22 +320,26 @@ export default function FinancePage() {
                 </td>
                 <td>
                   <div className="flex items-center gap-1 flex-wrap">
-                    {inv.status !== 'paid' && inv.status !== 'cancelled' && (
+                    {canModule('finance', 'edit') && inv.status !== 'paid' && inv.status !== 'cancelled' && (
                       <button onClick={() => setPayModal(inv)}
                         className="btn-primary py-1 px-2 text-xs whitespace-nowrap">
                         <CheckCircle size={11} /> Paid
                       </button>
                     )}
-                    <button onClick={() => { setEditInvoice(inv); setModalOpen(true); }}
-                      className="btn-secondary py-1 px-2 text-xs">Edit</button>
-                    <button
-                      onClick={() => setDeleteTarget(inv)}
-                      disabled={inv.status === 'paid'}
-                      title={inv.status === 'paid' ? 'Paid invoices cannot be deleted' : 'Delete invoice'}
-                      className="btn-danger py-1 px-2 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Delete
-                    </button>
+                    {canModule('finance', 'edit') && (
+                      <button onClick={() => { setEditInvoice(inv); setModalOpen(true); }}
+                        className="btn-secondary py-1 px-2 text-xs">Edit</button>
+                    )}
+                    {canModule('finance', 'delete') && (
+                      <button
+                        onClick={() => setDeleteTarget(inv)}
+                        disabled={inv.status === 'paid'}
+                        title={inv.status === 'paid' ? 'Paid invoices cannot be deleted' : 'Delete invoice'}
+                        className="btn-danger py-1 px-2 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Delete
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>

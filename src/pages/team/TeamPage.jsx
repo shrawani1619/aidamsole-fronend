@@ -350,7 +350,7 @@ function UserForm({ onClose, existing }) {
 }
 
 export default function TeamPage() {
-  const { user: me, isAdmin, isSuperAdmin, canModule } = useAuth();
+  const { user: me, isSuperAdmin, canModule } = useAuth();
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
@@ -469,9 +469,11 @@ export default function TeamPage() {
                   )}
                 </div>
               </div>
-              {(isAdmin || isSuperAdmin) && (
+              {(canModule('team', 'edit') || (isSuperAdmin && u.isActive && String(u._id) !== String(me?._id) && u.role !== 'super_admin')) && (
                 <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-100">
-                  <button type="button" onClick={() => { setEditUser(u); setModalOpen(true); }} className="btn-secondary flex-1 min-w-[4rem] py-1.5 text-xs justify-center">Edit</button>
+                  {canModule('team', 'edit') && (
+                    <button type="button" onClick={() => { setEditUser(u); setModalOpen(true); }} className="btn-secondary flex-1 min-w-[4rem] py-1.5 text-xs justify-center">Edit</button>
+                  )}
                   {isSuperAdmin &&
                     u.isActive &&
                     String(u._id) !== String(me?._id) &&

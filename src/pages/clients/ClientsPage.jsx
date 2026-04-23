@@ -166,7 +166,7 @@ function ClientForm({ onClose, existing }) {
 }
 
 export default function ClientsPage() {
-  const { canManage, canModule, isAdmin } = useAuth();
+  const { canModule, isAdmin } = useAuth();
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
@@ -310,7 +310,7 @@ export default function ClientsPage() {
                   <td>
                     <div className="flex items-center gap-1">
                       <Link to={`/clients/${client._id}`} className="btn-secondary py-1 px-2 text-xs">View</Link>
-                      {canManage && (
+                      {canModule('clients', 'edit') && (
                         <button onClick={() => { setEditClient(client); setModalOpen(true); }}
                           className="btn-secondary py-1 px-2 text-xs">Edit</button>
                       )}

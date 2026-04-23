@@ -61,8 +61,8 @@ export const AuthProvider = ({ children }) => {
   const isSuperAdmin = user?.role === 'super_admin';
   const isAdmin      = user?.role === 'super_admin' || user?.role === 'admin';
   const isManager    = user?.role === 'department_manager';
-  // canManage: super_admin, admin, and dept_manager can all create/edit
-  const canManage    = isAdmin || isManager;
+  /** Admin roles only — matches backend project budget visibility; not the same as per-module `create`. */
+  const canManage = isAdmin || isManager;
 
   const canModule = useCallback((module, action) => {
     if (user?.role === 'super_admin') return true;

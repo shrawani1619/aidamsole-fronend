@@ -40,8 +40,6 @@ export const Badge = ({ children, variant = 'gray', className = '' }) => {
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
 export const Modal = ({ open, onClose, title, children, size = 'md', footer }) => {
-  if (!open) return null;
-  const sizeClass = size === 'xl' ? 'modal-xl' : size === 'lg' ? 'modal-lg' : 'modal';
   const overlayMouseDownRef = useRef(false);
   const [outsideClickBlink, setOutsideClickBlink] = useState(false);
   const blinkTimerRef = useRef(null);
@@ -71,6 +69,10 @@ export const Modal = ({ open, onClose, title, children, size = 'md', footer }) =
     // Keep dialog open; show quick validation blink instead.
     triggerBlink();
   };
+
+  if (!open) return null;
+
+  const sizeClass = size === 'xl' ? 'modal-xl' : size === 'lg' ? 'modal-lg' : 'modal';
 
   return (
     <div

@@ -502,7 +502,7 @@ export default function ChatPage() {
       {/* Chat area */}
       <div
         className={`flex-1 flex flex-col min-h-0 ${
-          isDraftGreyTheme ? 'bg-neutral-800' : 'bg-surface-secondary'
+          'bg-surface-secondary'
         }`}
       >
         {!activeConvo && !draftPeer ? (
@@ -520,9 +520,7 @@ export default function ChatPage() {
             {/* Header */}
             <div
               className={`px-5 py-3.5 border-b flex items-center gap-3 flex-shrink-0 ${
-                isDraftGreyTheme
-                  ? 'bg-neutral-800/95 border-neutral-700'
-                  : 'bg-white border-gray-100'
+                'bg-white border-gray-100'
               }`}
             >
               {draftPeer && !activeConvo ? (
@@ -530,12 +528,12 @@ export default function ChatPage() {
                   <div className="relative">
                     <Avatar user={draftPeer} size="md" />
                     {onlineUsers?.includes(draftPeer._id) && (
-                      <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-neutral-800" />
+                      <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white" />
                     )}
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-neutral-100">{draftPeer.name}</p>
-                    <p className="text-xs text-neutral-400">{onlineUsers?.includes(draftPeer._id) ? '🟢 Online' : 'Offline'}</p>
+                    <p className="text-sm font-semibold text-gray-900">{draftPeer.name}</p>
+                    <p className="text-xs text-gray-400">{onlineUsers?.includes(draftPeer._id) ? '🟢 Online' : 'Offline'}</p>
                   </div>
                 </>
               ) : (
@@ -561,20 +559,20 @@ export default function ChatPage() {
             {/* Messages */}
             <div
               className={`flex-1 overflow-y-auto min-h-0 p-5 space-y-3 ${
-                isDraftGreyTheme ? 'bg-neutral-800' : ''
+                ''
               }`}
             >
               {draftPeer && !activeConvo ? (
                 <div className="h-full min-h-[240px] flex flex-col items-center justify-center text-center gap-5 px-2">
-                  <div className="w-full max-w-md rounded-2xl border border-neutral-600/70 bg-neutral-700/45 px-6 py-8 shadow-inner">
-                    <p className="text-sm text-neutral-300 leading-relaxed">
+                  <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white/70 backdrop-blur px-6 py-8 shadow-card">
+                    <p className="text-sm text-gray-600 leading-relaxed">
                       No messages yet. Say hello to start the conversation.
                     </p>
                     <button
                       type="button"
                       onClick={handleSayHii}
                       disabled={openDirectMutation.isPending}
-                      className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-neutral-600 text-neutral-50 text-sm font-medium border border-neutral-500/60 hover:bg-neutral-500 transition-colors disabled:opacity-50 shadow-md"
+                      className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-navy text-white text-sm font-medium hover:bg-brand-navy-dark transition-colors disabled:opacity-50 shadow-md"
                     >
                       {openDirectMutation.isPending ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />}
                       Say Hii
@@ -698,11 +696,7 @@ export default function ChatPage() {
 
             {/* Input */}
             <div
-              className={`px-5 py-4 border-t space-y-2 flex-shrink-0 ${
-                isDraftGreyTheme
-                  ? 'bg-neutral-800 border-neutral-700'
-                  : 'bg-white border-gray-100'
-              }`}
+              className="px-5 py-4 border-t border-gray-100 space-y-2 flex-shrink-0 bg-white"
             >
               <input
                 ref={fileInputRef}
@@ -713,22 +707,14 @@ export default function ChatPage() {
               />
               {pendingFile && (
                 <div
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm ${
-                    isDraftGreyTheme
-                      ? 'bg-neutral-700/70 border-neutral-600 text-neutral-100'
-                      : 'bg-surface-secondary border-gray-200 text-gray-800'
-                  }`}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg border text-sm bg-surface-secondary border-gray-200 text-gray-800"
                 >
-                  <FileText size={16} className={`flex-shrink-0 ${isDraftGreyTheme ? 'text-neutral-300' : 'text-brand-navy'}`} />
+                  <FileText size={16} className="flex-shrink-0 text-brand-navy" />
                   <span className="flex-1 min-w-0 truncate font-medium" title={pendingFile.name}>{pendingFile.name}</span>
                   <button
                     type="button"
                     onClick={() => setPendingFile(null)}
-                    className={`p-1 rounded-md ${
-                      isDraftGreyTheme
-                        ? 'text-neutral-400 hover:text-neutral-100 hover:bg-neutral-600/80'
-                        : 'text-gray-500 hover:text-gray-800 hover:bg-white/80'
-                    }`}
+                    className="p-1 rounded-md text-gray-500 hover:text-gray-800 hover:bg-white/80"
                     aria-label="Remove attachment"
                   >
                     <X size={16} />
@@ -736,22 +722,14 @@ export default function ChatPage() {
                 </div>
               )}
               <div
-                className={`flex items-center gap-3 rounded-xl border-2 px-4 py-2.5 shadow-sm ${
-                  isDraftGreyTheme
-                    ? 'border-neutral-600 bg-neutral-700/40'
-                    : 'border-gray-400 bg-gray-50'
-                }`}
+                className="flex items-center gap-3 rounded-xl border-2 border-gray-400 bg-gray-50 px-4 py-2.5 shadow-sm"
               >
                 <button
                   type="button"
                   onClick={handlePickFile}
                   disabled={draftPeer ? openDirectMutation.isPending : sendMutation.isPending}
                   title="Attach file"
-                  className={`w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-lg transition-colors disabled:opacity-40 ${
-                    isDraftGreyTheme
-                      ? 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-600/60'
-                      : 'text-gray-600 hover:text-brand-navy hover:bg-white'
-                  }`}
+                  className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-lg transition-colors disabled:opacity-40 text-gray-600 hover:text-brand-navy hover:bg-white"
                 >
                   <Upload size={18} />
                 </button>
@@ -764,21 +742,13 @@ export default function ChatPage() {
                         ? `Message ${draftPeer.name}...`
                         : `Message ${getConvoName(activeConvo)}...`
                   }
-                  className={`flex-1 bg-transparent text-sm outline-none ${
-                    isDraftGreyTheme
-                      ? 'text-neutral-100 placeholder:text-neutral-500'
-                      : 'text-gray-900 placeholder:text-gray-400'
-                  }`}
+                  className="flex-1 bg-transparent text-sm outline-none text-gray-900 placeholder:text-gray-400"
                 />
                 <button
                   type="button"
                   onClick={handleSend}
                   disabled={!canSend || (draftPeer ? openDirectMutation.isPending : sendMutation.isPending)}
-                  className={`w-8 h-8 text-white rounded-lg flex items-center justify-center transition-colors disabled:opacity-50 ${
-                    isDraftGreyTheme
-                      ? 'bg-neutral-600 hover:bg-neutral-500'
-                      : 'bg-brand-navy hover:bg-brand-navy-dark'
-                  }`}
+                  className="w-8 h-8 text-white rounded-lg flex items-center justify-center transition-colors disabled:opacity-50 bg-brand-navy hover:bg-brand-navy-dark"
                 >
                   {(draftPeer ? openDirectMutation.isPending : sendMutation.isPending) ? (
                     <Loader2 size={14} className="animate-spin" />

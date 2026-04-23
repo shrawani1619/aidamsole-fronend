@@ -369,7 +369,7 @@ export default function ProjectsPage() {
           <h2 className="page-title">Projects</h2>
           <p className="text-sm text-gray-500">{total} total projects</p>
         </div>
-        {canManage && (
+        {canModule('projects', 'create') && (
           <button className="btn-primary" onClick={() => { setEditProject(null); setModalOpen(true); }}>
             <Plus size={16} /> New Project
           </button>
@@ -511,7 +511,7 @@ export default function ProjectsPage() {
                     >
                       <Eye size={12} /> View
                     </Link>
-                    {canManage && (
+                    {canModule('projects', 'edit') && (
                       <button
                         type="button"
                         onClick={() => { setEditProject(p); setModalOpen(true); }}

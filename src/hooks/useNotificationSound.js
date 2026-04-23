@@ -9,25 +9,26 @@ function getSoundPath() {
 export default function useNotificationSound() {
   const audioRef = useRef(null);
   const audioCtxRef = useRef(null);
-  const soundPathRef = useRef(getSoundPath());
+  const blobUrlRef = useRef(null);
+  const loadPromiseRef = useRef(null);
 
   useEffect(() => {
-    const audio = new Audio(soundPathRef.current);
-    audio.preload = 'auto';
-    audio.volume = 1;
-    audio.load();
-    audioRef.current = audio;
-    audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-
-    console.log('[NotificationSound] initialized', {
-      src: soundPathRef.current,
-      volume: audio.volume,
-      audioCtxState: audioCtxRef.current?.state,
-    });
-
+    try {
+      audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+    } catch {
+      audioCtxRef.current = null;
+    }
     return () => {
-      audio.pause();
-      audioRef.current = null;
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
+      }
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+        audioRef.current = null;
+      }
+      loadPromiseRef.current = null;
       if (audioCtxRef.current) {
         void audioCtxRef.current.close();
       }
@@ -35,12 +36,36 @@ export default function useNotificationSound() {
     };
   }, []);
 
+  const ensureAudio = useCallback(async () => {
+    if (audioRef.current) return audioRef.current;
+    if (loadPromiseRef.current) return loadPromiseRef.current;
+
+    loadPromiseRef.current = (async () => {
+      const path = getSoundPath();
+      try {
+        const res = await fetch(path, { cache: 'no-store', mode: 'same-origin' });
+        if (!res.ok) return null;
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        blobUrlRef.current = url;
+        const audio = new Audio(url);
+        audio.preload = 'auto';
+        audio.volume = 1;
+        audioRef.current = audio;
+        return audio;
+      } catch {
+        return null;
+      } finally {
+        loadPromiseRef.current = null;
+      }
+    })();
+
+    return loadPromiseRef.current;
+  }, []);
+
   const playFallbackBeep = useCallback(() => {
     const ctx = audioCtxRef.current;
-    if (!ctx) {
-      console.log('[NotificationSound] fallback beep skipped (no audio context)');
-      return;
-    }
+    if (!ctx) return;
 
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -56,70 +81,52 @@ export default function useNotificationSound() {
     gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
     osc.start(now);
     osc.stop(now + 0.2);
-    console.log('[NotificationSound] fallback beep played');
   }, []);
 
   const unlock = useCallback(async () => {
-    if (!audioRef.current) {
-      console.log('[NotificationSound] unlock skipped (audio not ready)');
-      return;
-    }
-
     try {
-      if (audioCtxRef.current && audioCtxRef.current.state !== 'running') {
+      if (audioCtxRef.current?.state === 'suspended') {
         await audioCtxRef.current.resume();
       }
-      audioRef.current.muted = true;
-      await audioRef.current.play();
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-      console.log('[NotificationSound] unlock success', {
-        audioCtxState: audioCtxRef.current?.state,
-      });
-    } catch (error) {
-      console.log('[NotificationSound] unlock failed', {
-        message: error?.message,
-        name: error?.name,
-      });
-    } finally {
-      // Never leave audio muted after an unlock attempt.
-      if (audioRef.current) audioRef.current.muted = false;
+    } catch {
+      /* ignore */
     }
-  }, []);
+
+    const audio = await ensureAudio();
+    if (!audio) return;
+
+    try {
+      audio.muted = true;
+      await audio.play();
+      audio.pause();
+      audio.currentTime = 0;
+    } catch {
+      /* decode / autoplay policy — beep may still work */
+    } finally {
+      audio.muted = false;
+    }
+  }, [ensureAudio]);
 
   const play = useCallback(async () => {
-    if (!audioRef.current) {
-      console.log('[NotificationSound] play skipped (audio not ready)');
+    const audio = (await ensureAudio()) || audioRef.current;
+    if (!audio) {
+      playFallbackBeep();
       return;
     }
 
     try {
-      audioRef.current.currentTime = 0;
-      await audioRef.current.play();
-      console.log('[NotificationSound] mp3 play success', {
-        muted: audioRef.current.muted,
-        volume: audioRef.current.volume,
-        readyState: audioRef.current.readyState,
-      });
-    } catch (error) {
-      console.log('[NotificationSound] mp3 play failed, trying unlock+retry', {
-        message: error?.message,
-        name: error?.name,
-      });
+      audio.currentTime = 0;
+      await audio.play();
+    } catch {
       try {
         await unlock();
-        audioRef.current.currentTime = 0;
-        await audioRef.current.play();
-        console.log('[NotificationSound] mp3 play success after unlock retry');
-      } catch (retryError) {
-        console.log('[NotificationSound] mp3 play failed after unlock retry', {
-          message: retryError?.message,
-          name: retryError?.name,
-        });
+        audio.currentTime = 0;
+        await audio.play();
+      } catch {
         playFallbackBeep();
       }
     }
-  }, [unlock, playFallbackBeep]);
+  }, [ensureAudio, unlock, playFallbackBeep]);
 
   useEffect(() => {
     const onFirstInteraction = () => {

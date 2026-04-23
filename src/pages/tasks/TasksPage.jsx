@@ -389,6 +389,7 @@ function TaskCard({ task, onEdit, onApprove, onTrash, canTrash }) {
 
 export default function TasksPage() {
   const { user, canModule } = useAuth();
+  const canCreateTask = canModule('tasks', 'create');
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -445,9 +446,11 @@ export default function TasksPage() {
           <p className="text-sm text-gray-500">{tasks.length} tasks · {tasks.filter(t => t.isDelayed).length} delayed</p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="btn-primary" onClick={() => { setEditTask(null); setModalOpen(true); }}>
-            <Plus size={16} /> New Task
-          </button>
+          {canCreateTask && (
+            <button className="btn-primary" onClick={() => { setEditTask(null); setModalOpen(true); }}>
+              <Plus size={16} /> New Task
+            </button>
+          )}
         </div>
       </div>
 

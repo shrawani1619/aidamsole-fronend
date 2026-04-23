@@ -250,8 +250,7 @@ function AddMemberModal({ dept, onClose }) {
 }
 
 export default function DepartmentsPage() {
-  // canManage comes from AuthContext — super_admin + admin + dept_manager
-  const { canManage } = useAuth();
+  const { canModule } = useAuth();
   const qc = useQueryClient();
   const [modalOpen,     setModalOpen]     = useState(false);
   const [editDept,      setEditDept]      = useState(null);
@@ -282,7 +281,7 @@ export default function DepartmentsPage() {
           <p className="text-sm text-gray-500">{departments.length} departments · RBAC enforced</p>
         </div>
         <div className="flex items-center gap-2">
-          {canManage && (
+          {canModule('departments', 'create') && (
             <button className="btn-primary" onClick={() => { setEditDept(null); setModalOpen(true); }}>
               <Plus size={16} /> Add Dept
             </button>
@@ -321,7 +320,7 @@ export default function DepartmentsPage() {
                     )}
                   </div>
                 </div>
-                {canManage && (
+                {canModule('departments', 'edit') && (
                   <button onClick={() => { setEditDept(dept); setModalOpen(true); }}
                     className="text-xs text-brand-navy hover:underline font-medium">Edit</button>
                 )}
@@ -349,7 +348,7 @@ export default function DepartmentsPage() {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-semibold text-gray-600">{dept.members?.length || 0} Members</p>
-                  {canManage && (
+                  {canModule('departments', 'edit') && (
                     <button onClick={() => setAddMemberDept(dept)}
                       className="flex items-center gap-1 text-xs text-brand-navy hover:underline font-medium">
                       <UserPlus size={11} /> Add
@@ -371,7 +370,7 @@ export default function DepartmentsPage() {
                           </p>
                         </div>
                       </div>
-                      {canManage && !departmentHeadIdSet(dept).has(String(m._id)) && (
+                      {canModule('departments', 'edit') && !departmentHeadIdSet(dept).has(String(m._id)) && (
                         <button
                           onClick={() => setRemoveMember({ deptId: dept._id, userId: m._id, name: m.name })}
                           className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all rounded">
@@ -433,7 +432,7 @@ export default function DepartmentsPage() {
                     </p>
                   </div>
                 </div>
-                {canManage && !departmentHeadIdSet(viewAllDept).has(String(m._id)) && (
+                {canModule('departments', 'edit') && !departmentHeadIdSet(viewAllDept).has(String(m._id)) && (
                   <button
                     type="button"
                     onClick={() =>

@@ -8,7 +8,9 @@ import { PageLoader, EmptyState, ConfirmDialog } from '../../components/ui';
 import { formatDate, slugToLabel } from '../../utils/helpers';
 
 export default function TrashPage() {
-  const { isSuperAdmin } = useAuth();
+  const { canModule } = useAuth();
+  const canTrashRestore = canModule('trash', 'edit');
+  const canTrashPermanent = canModule('trash', 'delete');
   const qc = useQueryClient();
   const [permTarget, setPermTarget] = useState(null);
 
@@ -98,15 +100,17 @@ export default function TrashPage() {
                       {u.deletedAt ? formatDate(u.deletedAt, 'dd MMM yyyy HH:mm') : '—'}
                     </td>
                     <td className="py-2.5 text-right space-x-2">
-                      <button
-                        type="button"
-                        className="btn-secondary py-1 px-2 text-xs inline-flex items-center gap-1"
-                        onClick={() => restoreUserMut.mutate(u._id)}
-                        disabled={restoreUserMut.isPending}
-                      >
-                        <RotateCcw size={14} /> Restore
-                      </button>
-                      {isSuperAdmin && (
+                      {canTrashRestore && (
+                        <button
+                          type="button"
+                          className="btn-secondary py-1 px-2 text-xs inline-flex items-center gap-1"
+                          onClick={() => restoreUserMut.mutate(u._id)}
+                          disabled={restoreUserMut.isPending}
+                        >
+                          <RotateCcw size={14} /> Restore
+                        </button>
+                      )}
+                      {canTrashPermanent && (
                         <button
                           type="button"
                           className="btn-secondary py-1 px-2 text-xs text-red-600 hover:bg-red-50 inline-flex items-center gap-1"
@@ -152,15 +156,17 @@ export default function TrashPage() {
                       {t.deletedAt ? formatDate(t.deletedAt, 'dd MMM yyyy HH:mm') : '—'}
                     </td>
                     <td className="py-2.5 text-right space-x-2">
-                      <button
-                        type="button"
-                        className="btn-secondary py-1 px-2 text-xs inline-flex items-center gap-1"
-                        onClick={() => restoreTaskMut.mutate(t._id)}
-                        disabled={restoreTaskMut.isPending}
-                      >
-                        <RotateCcw size={14} /> Restore
-                      </button>
-                      {isSuperAdmin && (
+                      {canTrashRestore && (
+                        <button
+                          type="button"
+                          className="btn-secondary py-1 px-2 text-xs inline-flex items-center gap-1"
+                          onClick={() => restoreTaskMut.mutate(t._id)}
+                          disabled={restoreTaskMut.isPending}
+                        >
+                          <RotateCcw size={14} /> Restore
+                        </button>
+                      )}
+                      {canTrashPermanent && (
                         <button
                           type="button"
                           className="btn-secondary py-1 px-2 text-xs text-red-600 hover:bg-red-50 inline-flex items-center gap-1"
